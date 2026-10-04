@@ -94,6 +94,40 @@ try {
         Assert-Equal (Get-Content -LiteralPath $file -Raw | ConvertFrom-Json).Version 2
         Assert-Equal (Test-Path -LiteralPath ($file+'.writing')) $false
     }
+    Test-Case 'Redirected processes return numeric success and failure exit codes on PowerShell 5.1' {
+        foreach ($expected in @(0,37)) {
+            $child="[Console]::Out.WriteLine('stdout fixture'); [Console]::Error.WriteLine('stderr fixture'); exit $expected"
+            $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($child))
+            $stdout=Join-Path $scratch ('child-'+$expected+'.out')
+            $stderr=Join-Path $scratch ('child-'+$expected+'.err')
+            $result=Invoke-Process (Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe') ('-NoProfile -EncodedCommand '+$encoded) 'Redirected process fixture' $scratch -OutputLog $stdout -ErrorLog $stderr
+            if ($result -isnot [int]) { throw 'Process result must be an integer, including zero.' }
+            Assert-Equal $result $expected
+            Assert-Equal ([IO.File]::ReadAllText($stdout).Trim()) 'stdout fixture'
+            Assert-Equal ([IO.File]::ReadAllText($stderr).Trim()) 'stderr fixture'
+        }
+    }
+    Test-Case 'Download monitor reports bytes, speed and elapsed time while its process is running' {
+        $watch=Join-Path $scratch 'progress.partial'
+        $script:LogPath=Join-Path $scratch 'progress.log'
+        $child="[IO.File]::WriteAllBytes('"+$watch.Replace("'","''")+"',(New-Object byte[] 1048576)); Start-Sleep -Seconds 6; exit 0"
+        $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($child))
+        try {
+            $result=Invoke-Process (Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe') ('-NoProfile -EncodedCommand '+$encoded) 'Download monitor fixture' $scratch -WatchFile $watch -ErrorLog (Join-Path $scratch 'progress.err')
+            Assert-Equal $result 0
+            if ([IO.File]::ReadAllText($script:LogPath) -notmatch '1.0 MiB on disk; .*MiB/s; elapsed') { throw 'Expected visible download progress was missing.' }
+        } finally { $script:LogPath=$null }
+    }
+    Test-Case 'Local Nexus key is read and pasted control/mask characters fail before HTTP' {
+        $script:ApiKey=''
+        $script:Config=@{NexusApiKey='***'}
+        Assert-Rejected { Initialize-Nexus } 'masking characters'
+        $script:ApiKey=''
+        $script:Config=@{NexusApiKey=('abc'+[char]10+'def')}
+        Assert-Rejected { Initialize-Nexus } 'control characters'
+        $script:ApiKey=''
+        $script:Config=@{Packages=@{};FomodSelections=@{}}
+    }
     $lux=@($catalogue | Where-Object Id -eq 'lux-cs')[0]
     $fomodRoot=New-Directory (Join-Path $scratch 'LuxFomod')
     $fomodFile=Join-Path $fomodRoot 'fomod\ModuleConfig.xml'

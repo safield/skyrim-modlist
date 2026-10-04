@@ -266,6 +266,7 @@ function Get-Catalogue {
 
 function Invoke-WebJson([string]$Uri, [hashtable]$Headers = @{}) {
     for ($attempt=1; $attempt -le 4; $attempt++) {
+        Write-Status ('Requesting metadata from {0} (attempt {1}/4; timeout 45s)' -f ([uri]$Uri).Host,$attempt)
         try { return Invoke-RestMethod -Uri $Uri -Headers $Headers -Method Get -TimeoutSec 45 }
         catch {
             $status = 0
@@ -281,13 +282,14 @@ function Invoke-WebJson([string]$Uri, [hashtable]$Headers = @{}) {
 }
 
 function Get-Nexus([string]$Relative) {
-    if (-not $script:ApiKey) { Stop-Install 'Nexus metadata requires an API key.' 'Set NEXUS_API_KEY for this PowerShell session, or provide LocalArchive mappings for every Nexus package. Get your personal key from Nexus account settings -> API.' 2 }
+    if (-not $script:ApiKey) { Stop-Install 'Nexus metadata requires an API key.' 'Set NEXUS_API_KEY or NexusApiKey in the local, ignored SkyrimMods.config.json, or provide LocalArchive mappings for every Nexus package.' 2 }
     return Invoke-WebJson ('https://api.nexusmods.com/v1/' + $Relative) @{
         apikey=$script:ApiKey; 'User-Agent'='SkyrimModInstaller/1.0'; Accept='application/json'
     }
 }
 
 function Initialize-Nexus {
+    if (-not $script:ApiKey) { $script:ApiKey=[string](Get-Value $script:Config 'NexusApiKey' '') }
     if (-not $script:ApiKey -and -not $NonInteractive) {
         $secure = Read-Host 'Nexus personal API key (hidden; Enter for supplied archives only)' -AsSecureString
         $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
@@ -295,9 +297,14 @@ function Initialize-Nexus {
         finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }
     }
     if ($script:ApiKey) {
+        $script:ApiKey=$script:ApiKey.Trim()
+        if ($script:ApiKey -match '[\x00-\x1f\x7f]' -or $script:ApiKey -match '^\*+$') {
+            Stop-Install 'The supplied Nexus key contains control characters or copied masking characters.' 'Copy the actual personal API key into the local config or terminal. Do not copy the displayed asterisks.' 2
+        }
         $user = Get-Nexus 'users/validate.json'
         $script:Premium = [bool](Get-Value $user 'is_premium' $false)
         Write-Status ('Nexus authentication accepted; automatic downloads: ' + $script:Premium) 'OK'
+        if (-not $script:Premium) { Write-Status 'Nexus free account: each Nexus archive needs a browser download; the installer will prompt for its downloaded file path.' 'WARN' }
     }
 }
 
@@ -372,6 +379,7 @@ function Select-NexusFile($Package) {
 function Save-Download([string]$Uri, [string]$Destination, [string]$Sha256 = '') {
     if (Test-Path -LiteralPath $Destination) {
         if ($Sha256 -and (Get-Hash $Destination) -ne $Sha256) { Stop-Install "Cached archive checksum mismatch: $Destination" 'Remove only that cached archive and download it again.' 2 }
+        Write-Status ('Using downloaded file: '+$Destination) 'OK'
         return $Destination
     }
     if ([uri]$Uri -and ([uri]$Uri).Scheme -ne 'https') {
@@ -382,7 +390,10 @@ function Save-Download([string]$Uri, [string]$Destination, [string]$Sha256 = '')
     if (-not $curl) { Stop-Install 'Windows curl.exe is unavailable.' 'Install a current Windows curl build or supply already downloaded archives.' 2 }
     $partial = $Destination + '.partial'
     Write-Status ('Downloading '+[IO.Path]::GetFileName($Destination)+'; cap 11.25 MB/s (90 Mbps)')
+    Write-Status ('Destination: '+$Destination)
     for ($attempt=1; $attempt -le 4; $attempt++) {
+        $resumeBytes=if (Test-Path -LiteralPath $partial) { (Get-Item -LiteralPath $partial).Length } else { 0L }
+        Write-Status ('Download attempt {0}/4; {1:N1} MiB already on disk; stalls time out after 120s below 1 KiB/s' -f $attempt,($resumeBytes/1MB))
         $errorLog=Join-Path $script:RunLogPath ('download-'+[guid]::NewGuid().ToString('N')+'.log')
         $arguments='--fail --location --proto =https --proto-redir =https --silent --show-error --connect-timeout 30 --speed-time 120 --speed-limit 1024 --limit-rate 11250000 --output "'+$partial+'" --continue-at - "'+$Uri+'"'
         # Do not log command arguments: the URL may have a signed Nexus token.
@@ -394,14 +405,18 @@ function Save-Download([string]$Uri, [string]$Destination, [string]$Sha256 = '')
             if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
         }
         if ($attempt -eq 4) { Stop-Install ("Download failed; curl exit {0}: {1}" -f $code,($errors -join ' ')) 'Check the network and download access. An expired Nexus link can be refreshed by rerunning. Partial downloads remain resumable.' 2 }
-        Write-Status "Download retry $attempt/4; curl exit $code" 'WARN'
-        Start-Sleep -Seconds ([Math]::Pow(2,$attempt))
+        $delay=[Math]::Pow(2,$attempt)
+        $summary=if ([string]::IsNullOrWhiteSpace([string]$errors)) { 'No error text was returned.' } else { ([string]$errors -replace '\s+',' ').Trim() }
+        if ($summary.Length -gt 400) { $summary=$summary.Substring(0,400)+'...' }
+        Write-Status "Download attempt $attempt/4 failed; curl exit ${code}: $summary Retry in ${delay}s. Details: $errorLog" 'WARN'
+        Start-Sleep -Seconds $delay
     }
     if (-not (Test-Path -LiteralPath $partial) -or (Get-Item -LiteralPath $partial).Length -lt 16) {
         Stop-Install 'Downloaded file is empty or too small to be an archive.' 'Check the actual download URL and account permissions.' 2
     }
     if ($Sha256 -and (Get-Hash $partial) -ne $Sha256) { Stop-Install 'Downloaded archive failed SHA256 verification.' 'Delete only the .partial file and retry; verify the expected author checksum.' 2 }
     Move-Item -LiteralPath $partial -Destination $Destination
+    Write-Status ('Downloaded {0}: {1:N1} MiB' -f [IO.Path]::GetFileName($Destination),((Get-Item -LiteralPath $Destination).Length/1MB)) 'OK'
     return $Destination
 }
 
@@ -536,19 +551,32 @@ function Invoke-Process([string]$Executable, [string]$Arguments, [string]$Label,
     if ($Visible) { $parameters.WindowStyle='Normal' } else { $parameters.WindowStyle='Hidden' }
     $process=Start-Process @parameters
     try {
-        $last=[DateTime]::UtcNow
+        # PowerShell 5.1 can otherwise return a null ExitCode for redirected children.
+        # Keep the native handle alive before waiting for the process to exit.
+        $null=$process.Handle
+        $started=[DateTime]::UtcNow; $last=$started
+        $lastBytes=if ($WatchFile -and (Test-Path -LiteralPath $WatchFile)) { (Get-Item -LiteralPath $WatchFile).Length } else { 0L }
+        $lastGrowth=$started
+        $interval=if ($WatchFile) { 5 } else { 30 }
         while (-not $process.WaitForExit(1000)) {
-            if (([DateTime]::UtcNow-$last).TotalSeconds -ge 30) {
-                $detail=''
-                if ($WatchFile -and (Test-Path -LiteralPath $WatchFile)) {
-                    $detail='; {0:N1} GiB received' -f ((Get-Item -LiteralPath $WatchFile).Length/1GB)
+            $now=[DateTime]::UtcNow
+            if (($now-$last).TotalSeconds -ge $interval) {
+                if ($WatchFile) {
+                    $bytes=if (Test-Path -LiteralPath $WatchFile) { (Get-Item -LiteralPath $WatchFile).Length } else { 0L }
+                    $rate=[Math]::Max(0,($bytes-$lastBytes))/1MB/($now-$last).TotalSeconds
+                    if ($bytes -gt $lastBytes) { $lastGrowth=$now }
+                    Write-Status ('{0}: {1:N1} MiB on disk; {2:N2} MiB/s; elapsed {3:N0}s; no new data for {4:N0}s' -f $Label,($bytes/1MB),$rate,($now-$started).TotalSeconds,($now-$lastGrowth).TotalSeconds)
+                    $lastBytes=$bytes
+                } else {
+                    Write-Status ('{0} still working; elapsed {1:N0}s' -f $Label,($now-$started).TotalSeconds)
                 }
-                Write-Status ($Label + ' still working' + $detail)
-                $last=[DateTime]::UtcNow
+                $last=$now
             }
         }
         $process.WaitForExit()
-        return $process.ExitCode
+        $code=$process.ExitCode
+        if ($null -eq $code) { Stop-Install "Cannot determine the exit code for $Label." 'The child process ended without a usable result. Inspect the process logs before retrying; completion has not been assumed.' 7 }
+        return [int]$code
     } finally { $process.Dispose() }
 }
 
@@ -1483,6 +1511,7 @@ function Initialize-Work {
         }
     } else { Write-Json $bindingPath @{GamePath=$script:GameRoot;UserSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value} }
     Write-Status "Mode: $Mode; runtime: $script:Runtime; logs: $script:RunLogPath"
+    Write-Status "Work folder: $script:WorkRoot; mod archives: $script:DownloadPath"
 }
 
 function Invoke-Preparation {
@@ -1638,7 +1667,11 @@ try {
         } catch { Write-Host ('Detailed failure report could not be written: '+$_.Exception.Message) -ForegroundColor Yellow }
         Write-Host ('Detailed log: '+$script:LogPath) -ForegroundColor Yellow
     }
-    Write-Host 'Do not launch Skyrim after an interrupted Install. Correct the reported problem and rerun with -Mode Install -Resume.' -ForegroundColor Yellow
+    if ([bool](Get-Variable 'DataTouched' -Scope Script -ValueOnly -ErrorAction SilentlyContinue)) {
+        Write-Host 'Do not launch Skyrim after an interrupted Install. Correct the reported problem and rerun with -Mode Install -Resume.' -ForegroundColor Yellow
+    } else {
+        Write-Host 'Stopped before game deployment. Correct the error and rerun with the same -WorkPath; cached downloads will be reused.' -ForegroundColor Yellow
+    }
 } finally {
     if ($script:MutexOwned) { $script:Mutex.ReleaseMutex() }
     if ($null -ne $script:Mutex) { $script:Mutex.Dispose() }

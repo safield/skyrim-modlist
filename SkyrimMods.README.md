@@ -143,8 +143,10 @@ earlier runs is retained.
 ## Downloads, asset choices and generators
 
 Nexus Premium and a personal API key allow automatic Nexus downloads. The key
-is prompted invisibly or read from process environment `NEXUS_API_KEY`; never
-store it in JSON. Free accounts provide browser-downloaded archives.
+can come from process environment `NEXUS_API_KEY` or `NexusApiKey` in the local,
+ignored `SkyrimMods.config.json`; otherwise it is prompted invisibly. Never add
+the key to the tracked example configuration or a Git commit. Free accounts
+provide browser-downloaded archives.
 `-ArchiveDirectory 'D:\Downloads\ReviewedMods'` accepts files named after
 package IDs, such as `smim.7z`. Official GitHub releases provide CS terrain
 features, portable 7-Zip, xLODGen and LOOT.
@@ -152,7 +154,11 @@ features, portable 7-Zip, xLODGen and LOOT.
 
 Script-managed downloads remain sequential, resumable and capped at
 `curl --limit-rate 11250000` (90 Mbps). Browser downloads are outside this
-cap. Archive SHA256/file IDs are locked; `-RefreshDownloads` deliberately
+cap. Downloads display the destination, attempt number and completion size;
+every five seconds they report bytes on disk, recent speed and elapsed time.
+Retries include curl's exit code/error and the diagnostic log location. A
+stalled transfer times out after 120 seconds below 1 KiB/s. Other running tools
+report a heartbeat every 30 seconds. Archive SHA256/file IDs are locked; `-RefreshDownloads` deliberately
 resolves updated versions and invalidates generation when inputs change.
 FOMOD exact choices are saved in `fomod.choices.json`. Invalid/unavailable
 choices, unsupported installer instructions and unsafe archive paths fail.
