@@ -5,6 +5,12 @@ Prepare/Install have **not been run**. No mods, game binaries or Steam settings
 have been changed by authoring it. Static checks do not establish that the game or
 Steam Remote Play will actually work; that needs a later authorized live test.
 
+The separately authorized downgrade to **1.6.1170.0** has been prepared with
+verified replacement files and backups. Deployment is pending because Dota 2
+is running and applying the downgrade requires a brief Steam restart. See
+[the downgrade record and steps](SkyrimDowngrade.README.md) for the current
+state, local artifacts, verification, restoration and remaining setup work.
+
 ## Terrain setup and remaining ENB compatibility check
 
 The terrain setup uses current Fantasia with Terrain Helper and powerofthree's
