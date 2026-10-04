@@ -1,20 +1,25 @@
 # Skyrim downgrade record and steps
 
-Recorded on **October 3, 2026**, America/Winnipeg.
+Prepared on **October 3, 2026**; cancelled on **October 4, 2026**, America/Winnipeg.
 
-**Current state: prepared, awaiting deployment.** The installed game remains
-**1.7.104.0**. All nine replacement files for **1.6.1170.0** have been prepared
-and verified, and the originals and saves have been backed up. The apply step
-stopped before any changes because **Dota 2 was running**. Closing Steam while
-another Steam game is active could interrupt that session.
+**Current state: cancelled.** The user cancelled the downgrade and decided to
+use a setup without ENB. Skyrim remains **1.7.104.0**. All nine affected game
+files still match their original 1.7.104 hashes and Steam's update settings are
+unchanged. The installer configuration matched its original backup when the
+downgrade was cancelled; it was subsequently updated for the Community Shaders
+[V2 installer](SkyrimMods.README.md), retaining runtime 1.7.104.0.
+**No game or Steam changes need reversing.**
 
-The user authorized the downgrade and then requested this record and its
-commit. The downgrade can continue when the running Steam game is closed.
+The earlier apply attempt stopped before any changes because Dota 2 was
+running. The local state is now `Cancelled`; both prepare and apply helpers
+reject that state. Prepared files and backups remain available as historical
+artifacts. The steps below record the abandoned plan and do not authorize
+resuming it.
 
 ## Target and sources
 
-The requested target is the latest Skyrim version with verified ENB support.
-For this setup, the selected Steam runtime is **1.6.1170.0**. Terrain Helper's
+The abandoned downgrade sought the latest Skyrim version with verified ENB
+support. Its selected Steam runtime was **1.6.1170.0**. Terrain Helper's
 author lists 1.6.1170 among supported versions and explicitly warns in the
 1.1.0 changelog that ENB does not work with 1.7 yet. This is compatibility
 evidence for selecting the target; this session has not performed a live ENB
@@ -98,9 +103,9 @@ Its `%LOCALAPPDATA%` equivalent is
 | `backup\local-profile\` | Copies of files from the local Skyrim profile |
 | `backup\SkyrimMods.config.json` | Original installer configuration |
 | `patcher.log` | Output from creating the staged replacement files |
-| `state.json` | Current status: `Prepared` |
-| `Prepare-Downgrade.ps1` | Local helper used to download, back up, patch and verify |
-| `Apply-Downgrade.ps1` | Local helper for deploying the prepared files |
+| `state.json` | Current status: `Cancelled`; reason and cancellation time recorded |
+| `Prepare-Downgrade.ps1` | Local preparation helper; rejects the cancelled state |
+| `Apply-Downgrade.ps1` | Local deployment helper; rejects the cancelled state |
 | `Restore-1.7.104.ps1` | Local helper for restoring a completed downgrade |
 
 These helpers, binaries, backups and game files are **local artifacts outside
@@ -109,8 +114,8 @@ Keep the working folder to retain restoration and verification material.
 
 All **88 save files** were individually compared against their backup copies
 using SHA256, and all matched. The original saves remain in their normal
-location. Steam's manifest backup and `restore-metadata.json` will be written
-during the apply step, after Steam has closed.
+location. Steam's manifest backup and `restore-metadata.json` were never
+created because deployment did not start.
 
 ## Preparation completed
 
@@ -138,6 +143,9 @@ during the apply step, after Steam has closed.
     configuration or Steam settings.
 11. Rechecked the installed nine files afterward; all still matched their
     original **1.7.104** hashes.
+12. On October 4, cancelled the downgrade at the user's request, reverified
+    all nine original game files, confirmed the configuration and Steam
+    settings were unchanged, and marked the local state `Cancelled`.
 
 Prepared replacement files:
 
@@ -153,11 +161,12 @@ Prepared replacement files:
 | `Data\HearthFires.esm` | 3,977,420 |
 | `Data\Dragonborn.esm` | 64,663,863 |
 
-## Applying the prepared downgrade
+## Historical application steps: cancelled
 
-This step is authorized but **has not completed**. Close Dota 2 and other
-Steam games first. Run under the same Windows account that owns these
-artifacts. Writing this Program Files installation may require elevation.
+**Do not run this step. The user cancelled it and the helper now rejects it.**
+The following command and behavior document the previously prepared method.
+That method required closing other Steam games, using the same Windows
+account and, if required, elevation to write the Program Files installation.
 
 ```powershell
 $downgradeRoot = Join-Path $env:LOCALAPPDATA 'SkyrimDowngrade\20261003-1.6.1170'
@@ -194,7 +203,7 @@ Steam's manifest protection is not a guarantee against game updates.
 **Steam file verification or reinstalling can replace the downgraded files.**
 Do not use either operation while intending to keep this setup.
 
-## Verifying after deployment
+## Historical verification steps
 
 ```powershell
 $gameRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition'
@@ -213,7 +222,7 @@ foreach ($entry in $catalog.files) {
 Successful deployment should report `1.6.1170.0`, `Status = Complete` and
 matching target hashes for all nine files. This check does not launch Skyrim.
 
-## Restoring the original 1.7.104 setup
+## Historical restoration steps
 
 The restoration helper requires a completed downgrade and unchanged target
 files. Close Skyrim and other Steam games first:
@@ -230,10 +239,15 @@ was made. It then checks for **1.7.104.0**, records `Status = Restored` and
 restarts Steam if needed. Current saves are kept; profile backups are
 available separately if a save or INI restoration is wanted.
 
-Do not run the restoration helper now: the game is already on 1.7.104.0 and
-`state.json` is still `Prepared`.
+Do not run the restoration helper: the game is already on 1.7.104.0 and
+`state.json` is `Cancelled`. No restoration is needed.
 
 ## Remaining mod setup and live testing
+
+**Current decision: stay on 1.7.104.0 and exclude ENB.** The installer still
+implements the earlier ENB/Cabbage plan and needs revision before use with
+that decision. The notes below describe prerequisites of the abandoned ENB
+plan; they are retained as history.
 
 The existing [mod installer documentation](SkyrimMods.README.md) describes
 the graphics list, download choices, generators and Steam/SKSE bridge.

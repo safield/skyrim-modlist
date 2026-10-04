@@ -1,14 +1,15 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-Downloads, stages, installs, and generates the mod setup in Install order.txt.
+Downloads, stages, installs, and generates the V2 setup in Install order.txt.
 .DESCRIPTION
 Default mode is Plan (read-only). Prepare downloads and builds staged payloads.
 Install deploys directly, runs LOOT and the four generators, and replaces
 SkyrimSELauncher.exe with an invisible Steam -> SKSE bridge. SkyrimSE.exe stays
 at its original name. No mod manager is needed to play. Generators and FOMOD
 choices are interactive unless choices have been recorded. See the accompanying
-README before using Install. Never dot-source this script.
+README before using Install. V2 uses Community Shaders and Non-Effects11 Lux CS
+on the existing Steam runtime. Never dot-source this script.
 #>
 [CmdletBinding()]
 param(
@@ -125,7 +126,7 @@ function Write-Json([string]$Path, $Object) {
     $json = ConvertTo-Json -InputObject $Object -Depth 40
     [IO.File]::WriteAllText($temporary, $json, (New-Object Text.UTF8Encoding($false)))
     if (Test-Path -LiteralPath $Path) {
-        [IO.File]::Replace($temporary, $Path, $null)
+        [IO.File]::Replace($temporary, $Path, [NullString]::Value)
     } else { [IO.File]::Move($temporary, $Path) }
 }
 
@@ -135,6 +136,21 @@ function Get-TextHash([string]$Text) {
     $hasher = [Security.Cryptography.SHA256]::Create()
     try { return ([BitConverter]::ToString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text)))).Replace('-', '') }
     finally { $hasher.Dispose() }
+}
+
+function Get-ActiveInstallList([string]$Text) {
+    $normalized=$Text.Replace("`r`n","`n").Replace("`r","`n")
+    $headers=@([regex]::Matches($normalized,'(?im)^\s*V2\s+USE THIS ONE\s*$'))
+    if ($headers.Count -ne 1) { Stop-Install 'Expected exactly one V2 USE THIS ONE section in Install order.txt.' 'Keep V1 as history and mark the active V2 section explicitly.' 3 }
+    $body=$normalized.Substring($headers[0].Index+$headers[0].Length)
+    $next=[regex]::Match($body,'(?im)^\s*V\d+\b')
+    if ($next.Success) { $body=$body.Substring(0,$next.Index) }
+    $entries=@([regex]::Matches($body,'(?m)^\s*(\d+)\.\s+(.+)$'))
+    if ($entries.Count -ne 31) { Stop-Install 'V2 must contain the reviewed 31 numbered steps.' 'Review changes to V2 against the catalogue before changing its pinned hash.' 3 }
+    for ($index=0; $index -lt $entries.Count; $index++) {
+        if ([int]$entries[$index].Groups[1].Value -ne $index+1) { Stop-Install 'V2 steps are missing, repeated or out of order.' 'Number the reviewed V2 list consecutively from 1 through 31.' 3 }
+    }
+    return [pscustomobject]@{Version='V2';Text=$body.Trim();Entries=$entries}
 }
 
 function Read-Choice([string]$Prompt, [string]$Default = '') {
@@ -157,14 +173,12 @@ function Get-Catalogue {
     # Dependencies are before their consumers. Numbered items keep the requested overwrite order.
     $packages.Add((New-Package -10 'skse' 'SKSE64 (matched to Steam runtime)' 30379 '.*' 'Skse'))
     $packages.Add((New-Package -9 'address-library' 'Address Library All in One' 32444 'All.in.One' 'Data'))
-    $packages.Add((New-Package -8 'kil-loader' 'KiLoader' 99404 'KiLoader' 'Data'))
-    $packages.Add((New-Package -7 'enb-extender' 'ENB Extender and Helper' 99406 'ENB.*(Extender|Helper)' 'Data'))
-    $packages.Add((New-Package -6 'evlas' 'EVLaS' 63725 '(EVLaS|Enhanced Volumetric)' 'Data'))
-    $packages.Add((New-Package -5 'enb-blending-fix' 'ENB Terrain Blending Fix (snow prerequisite)' 140041 'Terrain Blending Fix' 'Data'))
     $packages.Add((New-Package -4.5 'po3-tweaks' "powerofthree's Tweaks (Terrain Helper prerequisite)" 51073 'powerofthree.*Tweaks' 'Data'))
     $packages.Add((New-Package -4 'terrain-helper' 'Terrain Helper (Fantasia prerequisite)' 143149 'Terrain Helper' 'Data'))
     $packages.Add((New-Package -3 'dyndolod-resources' 'DynDOLOD Resources SE 3' 52897 'DynDOLOD Resources SE' 'Data'))
     $packages.Add((New-Package -2 'dyndolod-dll' 'DynDOLOD DLL NG and Scripts' 97720 'DynDOLOD.*(DLL|Scripts)' 'Data'))
+    $x=New-Package -1 'skse-menu-framework' 'SKSE Menu Framework (ISL Helper UI)' 120352 '^SKSE Menu Framework$'
+    $x.MinimumVersion='3.14.1'; $packages.Add($x)
     $packages.Add((New-Package 1 'smim' 'SMIM' 659 'SMIM.*(SE|Special|2)' 'Data' 'Install everything / highest quality' @('SMIM-SE-Merged-All.esp')))
     $packages.Add((New-Package 2 'mic' 'Mesh Improvement Compilation' 131131 '^Mesh Improvement Compilation$'))
     $packages.Add((New-Package 3 'skyland' 'Skyland AIO 2K' 34179 '^Skyland AIO(?: 2k)?$' 'Data' '2K; vanilla water (Water for ENB supplies water); default architecture'))
@@ -172,7 +186,7 @@ function Get-Catalogue {
     $packages.Add((New-Package 5 'fantasia' 'Skyking Fantasia Landscapes 4K' 107256 '^Skyking Fantasia Landscapes 4k$' 'Data' '4K; green tundra (match the subsequent parallax file)'))
     $packages.Add((New-Package 6 'fantasia-parallax' 'Fantasia Complex Parallax (green tundra)' 107256 '^Fantasia Landscapes Complex Parallax Green Tundra$'))
     # The original ERM page is hidden. Its maintained successor supplies the meshes and textures separately.
-    $packages.Add((New-Package 7 'erm' 'ERM maintained meshes' 121336 '^ERM - Enhanced Rocks and Mountains$' 'Data' 'Complex material/parallax for ENB, not PBR; ERM blending'))
+    $packages.Add((New-Package 7 'erm' 'ERM maintained meshes' 121336 '^ERM - Enhanced Rocks and Mountains$' 'Data' 'Complex material/parallax for Community Shaders; ERM blending; retain the V2 texture choices'))
     $packages.Add((New-Package 7.1 'erm-textures' 'ERM full-resolution textures' 121336 '^ERM - Textures$' 'Data' 'Complex Material / Complex Parallax; 4K where offered'))
     $packages.Add((New-Package 8 'erm-fixes' 'ERM Blending Patch and Other Fixes' 131170 'Patch and Fixes.*FOMOD' 'Data' 'ERM complex parallax; Fantasia/Terrain Helper compatible option; Simplicity of Snow patch'))
     $packages.Add((New-Package 9 'snow' 'Simplicity of Snow' 56235 '^Simplicity of Snow$' 'Data' 'Parallax support; default assets' @('Simplicity of Snow.esp')))
@@ -195,8 +209,7 @@ function Get-Catalogue {
         $packages.Add((New-Package (13 + $index/1000) ('cathedral-' + $plant[0]) ('Cathedral 3D ' + $plant[1]) $plant[0] '' 'Data' 'Highest official resolution (4K when offered); default color/mesh; no optional unrelated-mod patches'))
     }
     $packages.Add((New-Package 13.9 'cathedral-hearthfire' 'Cathedral Mountain Flowers Hearthfire Patch' 41312 'Hearthfire Patch'))
-    $packages.Add((New-Package 14 'water' 'Water for ENB' 37061 '^Water for ENB$' 'Data' '4K/highest textures; ENB version; default water style' @('Water for ENB.esm')))
-    $packages.Add((New-Package 14.1 'water-cabbage' 'Water for ENB Cabbage compatibility patch' 37061 'Patch - Cabbage ENB'))
+    $packages.Add((New-Package 14 'water' 'Water for ENB (Community Shaders options)' 37061 '^Water for ENB$' 'Data' '4K/highest textures; select Community Shaders-compatible options; default water style' @('Water for ENB.esm')))
     $armors = @(
         @(84151,'Daedric'), @(83654,'Ebony'), @(87283,'Elven'), @(91136,'Ancient Nord'),
         @(83222,'Dragon'), @(101101,'Dragon Priests'), @(87580,'Glass'), @(98115,'Guards and Stormcloaks'),
@@ -215,25 +228,38 @@ function Get-Catalogue {
     $packages.Add((New-Package 16.2 'nordic-facegen' 'Nordic Faces Non-SMP FaceGeom' 40658 '^Nordic Faces - FaceGen - Non-SMP$'))
     $packages.Add((New-Package 17 'skyui' 'SkyUI 6' 12604 '^SkyUI$' 'Data' '' @('SkyUI_SE.esp')))
     $packages.Add((New-Package 18 'dear-diary' 'Dear Diary Dark Mode' 60837 'texts - warm color' 'Data' 'Controller-friendly settings; default warm text; SkyUI-compatible menus'))
-    $packages.Add((New-Package 19 'nat' 'NAT III weather plugin' 27141 'WEATHER' 'Data' 'Weather plugin only (Cabbage supplies the ENB preset)' @('NAT-ENB.esp')))
-    $packages.Add((New-Package 19.9 'lux-resources' 'Lux Via resources only' 63588 'Resources' 'Data' 'Resources only; do not install the Lux Via worldspace overhaul'))
-    $packages.Add((New-Package 20 'lux-orbis' 'Lux Orbis' 56095 '^Lux Orbis$' 'Data' 'Default/recommended Lux Orbis module' @('Lux Orbis - Master plugin.esm','Lux Orbis.esp')))
-    $packages.Add((New-Package 20.1 'lux-orbis-patches' 'Lux Orbis official patch hub' 114169 '^Lux Orbis - Patch Hub$' 'Data' 'Only patches whose masters are in this setup'))
-    $packages.Add((New-Package 21 'lux' 'Lux' 43158 '^Lux \(main\)$' 'Data' 'Default ENB lighting; highest-quality meshes' @('Lux - Master plugin.esm','Lux.esp')))
-    $packages.Add((New-Package 21.1 'lux-update' 'Lux main plugin update' 43158 'main plugin update'))
-    $packages.Add((New-Package 21.2 'lux-patches' 'Lux official patch hub' 113002 'patch hub' 'Data' 'Only patches whose masters are in this setup'))
-    # Cabbage 1.2+ requires the shader core in the game root BEFORE its preset.
-    $packages.Add((New-Package 22.9 'enb-binaries' 'ENBSeries Skyrim SE binaries' 0 '' 'EnbBinaries'))
-    $packages.Add((New-Package 22.95 'sh2-shader-core' 'Silent Horizons 2 - Shader Core (Cabbage prerequisite)' 101696 '^Silent Horizons 2 - Shader Core$' 'EnbShaders' 'Main archive; install enbseries into the game root before Cabbage'))
-    $packages.Add((New-Package 23 'cabbage' 'Cabbage ENB for NAT 3' 103042 '^Cabbage ENB' 'EnbPreset' 'Lux version; overwrite Shader Core with this preset after NAT III/Lux and before generation'))
-    $packages.Add((New-Package 24 'pgpatcher' 'PGPatcher / ParallaxGen' 120946 '^PGPatcher' 'Tool'))
-    $x = New-Package 25 'xlodgen' 'xLODGen' 0 '' 'Tool'
+    $packages.Add((New-Package 19 'nat' 'NAT.ENB III weather ESP ONLY - 3.1.1C Fixed' 27141 '^NAT\.ENB - ESP WEATHER PLUGIN v3\.1\.1C - Fixed$' 'Data' 'Weather ESP only; NAT.CS III overwrites it at step 22' @('NAT-ENB.esp')))
+    $x=New-Package 20 'community-shaders' 'Community Shaders official core' 86492 '^Community Shaders$' 'Data' 'Official core release; Cloud Shadows and ISL are bundled; do not use the Effects11/AIO archive'
+    $x.MinimumVersion='1.9.1'; $packages.Add($x)
+    $packages.Add((New-Package 20.1 'cs-terrain-helper' 'Community Shaders Terrain Helper feature' 0 '' 'Data' 'Enable the CS adapter for the existing Fantasia/Terrain Helper setup'))
+    $packages.Add((New-Package 20.2 'cs-terrain-blending' 'Community Shaders Terrain Blending feature' 0 '' 'Data' 'Terrain-to-mesh blending for the V2 complex-material assets'))
+    $x=New-Package 21 'skylighting' 'Skylighting - Community Shaders' 139352 '^Skylighting(?: - Community Shaders)?$'
+    $x.MinimumVersion='1.5.2'; $packages.Add($x)
+    $packages.Add((New-Package 22 'nat-cs' 'NAT.CS III' 139567 '^NAT\.CS(?: III)?$' 'Data' 'Install after and overwrite the NAT weather ESP; omit optional water-effect shadows requiring an extra fix'))
+    $x=New-Package 23 'light-placer' 'Light Placer' 127557 '^Light Placer$'
+    $x.MinimumVersion='5.0.0'; $packages.Add($x)
+    $x=New-Package 24 'isl-helper' 'ISL Helper SKSE' 179132 '^ISL Helper(?: SKSE)?$'
+    $x.MinimumVersion='1.0.6'; $packages.Add($x)
+    $packages.Add((New-Package 24.9 'lux-resources' 'Lux Via resources only' 63588 'Resources' 'Data' 'Resources only; no Lux Via worldspace overhaul'))
+    $packages.Add((New-Package 25 'lux-orbis' 'Lux Orbis' 56095 '^Lux Orbis$' 'Data' 'Community Shaders-compatible choices; retain Lux-prefixed meshes' @('Lux Orbis - Master plugin.esm','Lux Orbis.esp')))
+    $packages.Add((New-Package 25.1 'lux-orbis-patches' 'Lux Orbis official patch hub' 114169 '^Lux Orbis - Patch Hub$' 'Data' 'Only patches whose masters are in this setup'))
+    $packages.Add((New-Package 26 'lux' 'Lux' 43158 '^Lux \(main\)$' 'Data' 'Highest-quality meshes; Community Shaders/Light Limit Fix choices; Lux CS follows' @('Lux - Master plugin.esm','Lux.esp')))
+    $packages.Add((New-Package 26.1 'lux-update' 'Lux main plugin update' 43158 'main plugin update'))
+    $packages.Add((New-Package 26.2 'lux-patches' 'Lux official patch hub' 113002 'patch hub' 'Data' 'Only patches whose masters are in this setup'))
+    $x=New-Package 27 'lux-cs' 'Lux CS - Non-Effects11' 153919 '^Lux[. ]CS(?: Patch)?$' 'Data' 'Non-Effects11 variant; Light Placer/ISL; Lux Orbis tweaks; install after all Lux/Orbis patches'
+    $x.MinimumVersion='2.6.0'; $packages.Add($x)
+    $packages.Add((New-Package 28 'pgpatcher' 'PGPatcher / ParallaxGen' 120946 '^PGPatcher' 'Tool'))
+    $x = New-Package 29 'xlodgen' 'xLODGen' 0 '' 'Tool'
     $x.Repo = 'sheson/xLODGen'; $x.AssetPattern = '^xLODGen.*\.7z$'; $packages.Add($x)
-    $packages.Add((New-Package 26 'dyndolod-tools' 'DynDOLOD 3 (includes TexGen)' 68518 '^DynDOLOD' 'Tool'))
-    $x = New-Package 28 'loot' 'LOOT portable' 0 '' 'Tool'
+    $packages.Add((New-Package 30 'dyndolod-tools' 'DynDOLOD 3 tools (TexGen step 30, DynDOLOD step 31)' 68518 '^DynDOLOD' 'Tool'))
+    $x = New-Package 32 'loot' 'LOOT portable' 0 '' 'Tool'
     $x.Repo = 'loot/loot'; $x.AssetPattern = '^loot_.*-win64\.7z$'; $packages.Add($x)
     foreach ($package in $packages) {
-        if ($package.Id -in @('kil-loader','enb-extender','evlas','enb-blending-fix','po3-tweaks','terrain-helper','dyndolod-dll','skyui')) { $package.Native = $true }
+        if ($package.Id -in @('po3-tweaks','terrain-helper','dyndolod-dll','community-shaders','light-placer','isl-helper','skse-menu-framework')) { $package.Native = $true }
+        if ($package.Id -in @('cs-terrain-helper','cs-terrain-blending')) {
+            $package.Repo='community-shaders/skyrim-community-shaders'
+            $package.AssetPattern=if ($package.Id -eq 'cs-terrain-helper') { '^Terrain\.Helper-.*\.zip$' } else { '^Terrain\.Blending-.*\.zip$' }
+        }
     }
     return @($packages | Sort-Object Order)
 }
@@ -349,7 +375,7 @@ function Save-Download([string]$Uri, [string]$Destination, [string]$Sha256 = '')
         return $Destination
     }
     if ([uri]$Uri -and ([uri]$Uri).Scheme -ne 'https') {
-        Stop-Install 'A download does not use HTTPS.' 'Supply the official archive using LocalArchive. ENB hosts sometimes need a manual browser download.' 2
+        Stop-Install 'A download does not use HTTPS.' 'Supply the official archive using LocalArchive, or use the author HTTPS download URL.' 2
     }
     # curl.exe is shipped with current Windows. HTTP error bodies are rejected by --fail.
     $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
@@ -379,10 +405,12 @@ function Save-Download([string]$Uri, [string]$Destination, [string]$Sha256 = '')
     return $Destination
 }
 
-function Get-GitHubAsset([string]$Repository, [string]$Pattern) {
-    $release = Invoke-WebJson ('https://api.github.com/repos/{0}/releases/latest' -f $Repository) @{'User-Agent'='SkyrimModInstaller/1.0'}
+function Get-GitHubAsset([string]$Repository, [string]$Pattern, [string]$Tag = '') {
+    $endpoint=if ($Tag) { 'tags/'+[uri]::EscapeDataString($Tag) } else { 'latest' }
+    $release = Invoke-WebJson ('https://api.github.com/repos/{0}/releases/{1}' -f $Repository,$endpoint) @{'User-Agent'='SkyrimModInstaller/2.0'}
     $assets = @(Get-Value $release 'assets' @() | Where-Object { $_.name -match $Pattern })
     if ($assets.Count -ne 1) { Stop-Install "No unique official GitHub asset matching $Pattern in $Repository." 'Supply LocalArchive or update AssetPattern for the current official release.' 2 }
+    $assets[0] | Add-Member -NotePropertyName ReleaseVersion -NotePropertyValue ([string]$release.tag_name).TrimStart('v') -Force
     return $assets[0]
 }
 
@@ -432,29 +460,18 @@ function Get-Archive($Package) {
             }
         } else { $record.Archive=$destination }
     } elseif ($Package.Repo) {
-        $asset = Get-GitHubAsset $Package.Repo $Package.AssetPattern
-        $record.Archive=Save-Download $asset.browser_download_url (Join-Path $script:DownloadPath $asset.name) ([string](Get-Value $override 'Sha256' ''))
-        $record.Source='https://github.com/' + $Package.Repo
-    } elseif ($Package.Kind -eq 'EnbBinaries') {
-        $uri = [string](Get-Value $override 'DownloadUrl' '')
-        if (-not $uri) {
-            # The author deliberately uses HTML download pages. Follow only the author's HTTPS links.
-            try {
-                $page = Invoke-WebRequest -UseBasicParsing -Uri 'https://enbdev.com/download_mod_tesskyrimse.html' -TimeoutSec 30
-                $versions = @([regex]::Matches($page.Content, 'mod_tesskyrimse_v(\d+)\.htm') | ForEach-Object { [int]$_.Groups[1].Value } | Sort-Object -Descending -Unique)
-                if ($versions.Count) {
-                    $versionPage = Invoke-WebRequest -UseBasicParsing -Uri ('https://enbdev.com/mod_tesskyrimse_v{0:0000}.htm' -f $versions[0]) -TimeoutSec 30
-                    $match = [regex]::Match($versionPage.Content, '(?:https://[^"''<> ]+)?(?:/)?enbseries_skyrimse_v\d+\.zip')
-                    if ($match.Success) { $uri = (New-Object uri([uri]'https://enbdev.com/', $match.Value)).AbsoluteUri }
-                }
-            } catch { Write-Status 'The ENB author download page could not be resolved automatically.' 'WARN' }
+        $tag=''
+        if ($Package.Id -like 'cs-terrain-*') {
+            $core=@($script:Payloads | Where-Object { $_.Package.Id -eq 'community-shaders' })
+            if ($core.Count -ne 1) { Stop-Install 'Community Shaders must be staged before its terrain features.' 'Preserve the V2 dependency order.' 4 }
+            $tag='v'+(Get-PackageVersion $core[0].Package $core[0].Record).ToString(3)
         }
-        if (-not $uri) {
-            $supplied=Read-Choice 'Path to official ENBSeries Skyrim SE binary ZIP (download from https://enbdev.com/download_mod_tesskyrimse.html)'
-            if (-not (Test-Path -LiteralPath $supplied -PathType Leaf)) { Stop-Install 'ENBSeries binary archive is missing.' 'Provide enb-binaries.LocalArchive or an official HTTPS DownloadUrl.' 2 }
-            $record.Archive=Get-FullPath $supplied; $record.Manual=$true
-        } else { $record.Archive=Save-Download $uri (Join-Path $script:DownloadPath ([IO.Path]::GetFileName(([uri]$uri).AbsolutePath))) ([string](Get-Value $override 'Sha256' '')) }
-        $record.Source='https://enbdev.com/download_mod_tesskyrimse.html'
+        $asset = Get-GitHubAsset $Package.Repo $Package.AssetPattern $tag
+        $record.Version=$asset.ReleaseVersion
+        $record.Archive=Save-Download $asset.browser_download_url (Join-Path $script:DownloadPath $asset.name) ([string](Get-Value $override 'Sha256' ''))
+        $record.Source='https://github.com/' + $Package.Repo + '/releases/tag/v' + $record.Version
+    } else {
+        Stop-Install "No official archive source for $($Package.Id)." 'Supply a reviewed LocalArchive or correct the package catalogue.' 2
     }
     $record.Sha256=Get-Hash $record.Archive
     $expected = [string](Get-Value $override 'Sha256' '')
@@ -631,10 +648,23 @@ function Add-FomodFiles($Files, $Mappings) {
     }
 }
 
+function Test-NonEffectsOption([string]$Name) {
+    return $Name -match '(?i)\b(non|no|without)[\s_.-]*effects?(?:[\s_.-]*11)?\b'
+}
+
+function Assert-LuxCsOptions([string[]]$Selected) {
+    foreach ($name in $Selected) {
+        if ($name -match '(?i)effects?[\s_.-]*11' -and -not (Test-NonEffectsOption $name)) {
+            Stop-Install "Lux CS Effects11 option conflicts with NAT.CS III: $name" 'Select the Non-Effects11 variant; correct the exact saved FomodSelections/choices entry before resuming.' 4
+        }
+    }
+}
+
 function Stage-Fomod($Package, [string]$Root, [string]$ConfigFile, [string]$Output) {
     $xml=Read-SafeXml $ConfigFile
     $module=$xml.DocumentElement
     $flags=@{}
+    $nonEffectsSelected=$false
     if (-not (Test-Dependency ($module.SelectSingleNode('moduleDependencies')) $flags)) {
         Stop-Install "$($Package.Name): installer requirements are not met." 'Check required installed masters and runtime versions. No payload from this package was deployed.' 4
     }
@@ -660,6 +690,9 @@ function Stage-Fomod($Package, [string]$Root, [string]$ConfigFile, [string]$Outp
             }
             if ($rule -eq 'SelectAll') { $selected=$usable }
             elseif ($hasSaved) { $selected=if ($null -eq $saved) { @() } else { @($saved) }; $selected=@($selected) }
+            elseif ($Package.Id -eq 'lux-cs' -and $rule -eq 'SelectExactlyOne' -and @($usable | Where-Object { Test-NonEffectsOption $_ }).Count -eq 1) {
+                $selected=@($usable | Where-Object { Test-NonEffectsOption $_ })
+            }
             elseif ($usable.Count -eq 0) { $selected=@() }
             elseif ($rule -eq 'SelectExactlyOne' -and $usable.Count -eq 1) { $selected=$usable }
             else {
@@ -679,6 +712,13 @@ function Stage-Fomod($Package, [string]$Root, [string]$ConfigFile, [string]$Outp
                 }
             }
             $selected=@($selected+$required | Select-Object -Unique)
+            if ($Package.Id -eq 'lux-cs') {
+                Assert-LuxCsOptions $selected
+                if (@($selected | Where-Object { Test-NonEffectsOption $_ }).Count) { $nonEffectsSelected=$true }
+            }
+            if ($Package.Id -eq 'nat-cs' -and @($selected | Where-Object { $_ -match '(?i)water.*shadow|shadow.*water' -and $_ -notmatch '(?i)\b(no|without|disable|none)\b' }).Count) {
+                Stop-Install 'NAT.CS optional water shadows need an additional brightness/reflection fix outside V2.' 'Leave that optional water-shadows choice unselected. Keep the required Skylighting and bundled Cloud Shadows.' 4
+            }
             foreach ($name in $selected) {
                 if ($name -notin $usable) { Stop-Install "${key}: option is unavailable: $name" 'The archive or dependencies changed. Correct/remove that saved FomodSelections entry.' 4 }
             }
@@ -710,6 +750,9 @@ function Stage-Fomod($Package, [string]$Root, [string]$ConfigFile, [string]$Outp
     foreach ($pattern in @($module.SelectNodes('conditionalFileInstalls/patterns/pattern'))) {
         if (Test-Dependency ($pattern.SelectSingleNode('dependencies')) $flags) { Add-FomodFiles ($pattern.SelectSingleNode('files')) $mappings }
     }
+    if ($Package.Id -eq 'lux-cs' -and -not $nonEffectsSelected) {
+        Stop-Install 'The Lux CS installer did not select a reviewed Non-Effects11 variant.' 'Use Lux CS 2.6 or newer with its Non-Effects11 choice. A reviewed DataRoot payload requires Variant: Non-Effects11.' 4
+    }
     foreach ($mapping in @($mappings | Sort-Object Priority,Sequence)) {
         $entry=$mapping.Node
         $source=Get-SafeChild $Root $entry.GetAttribute('source') -AllowRoot
@@ -732,7 +775,7 @@ function Find-PayloadRoot($Package, [string]$Extracted) {
     for ($depth=0; $depth -lt 5; $depth++) {
         if (Test-Path -LiteralPath (Join-Path $current 'Data') -PathType Container) { return Join-Path $current 'Data' }
         $items=@(Get-ChildItem -LiteralPath $current -Force | Where-Object { $_.Name -ne '.extraction-complete.json' })
-        if (@($items | Where-Object { $_.Name -match '^(?i)(meshes|textures|scripts|SKSE|KiLoader|interface|sound|music|seq|strings|grass|shadersfx|video|lodsettings)$' -or $_.Name -match '\.(?i)(esm|esp|esl|bsa|bs2)$' }).Count) { return $current }
+        if (@($items | Where-Object { $_.Name -match '^(?i)(meshes|textures|scripts|SKSE|KiLoader|interface|sound|music|seq|strings|grass|shaders|shadersfx|LightPlacer|ParticleLights|Renderdoc|video|lodsettings)$' -or $_.Name -match '\.(?i)(esm|esp|esl|bsa|bs2)$' }).Count) { return $current }
         $directories=@($items | Where-Object { $_.PSIsContainer -and $_.Name -notmatch '^(?i)(fomod|docs?|screenshots?|images?)$' })
         if ($directories.Count -eq 1) { $current=$directories[0].FullName; continue }
         break
@@ -759,7 +802,45 @@ function Assert-Pe64([string]$Path) {
     finally { $reader.Dispose() }
 }
 
+function Get-PackageVersion($Package, $Record) {
+    $override=Get-PackageOverride $Package
+    $text=[string](Get-Value $override 'PackageVersion' (Get-Value $override 'NativeVersion' $Record.Version))
+    $match=[regex]::Match($text,'\d+(?:\.\d+){1,3}')
+    if (-not $match.Success) { Stop-Install "Unknown version for $($Package.Id): $text" 'For supplied archives record the verified author version in Packages.<id>.PackageVersion (or NativeVersion for native packages).' 4 }
+    $parsed=[version]$match.Value
+    # Nexus/manual versions may omit a trailing zero; compare the same release consistently.
+    return New-Object version($parsed.Major,$parsed.Minor,[Math]::Max(0,$parsed.Build),[Math]::Max(0,$parsed.Revision))
+}
+
+function Assert-ShaderPayload($Package, [string]$Data) {
+    foreach ($file in @(Get-ChildItem -LiteralPath $Data -Recurse -File)) {
+        if ($file.Name -match '^(?i)(d3d11\.dll|d3dcompiler_46e\.dll|enbseries\.ini|enblocal\.ini|Effects11\.ini)$' -or
+            (Get-RelativePath $Data $file.FullName) -match '^(?i)enbseries[\\/]') {
+            Stop-Install "ENB/Effects11 file is excluded by V2: $($file.FullName)" 'Use the official CS core and Non-Effects11 variants; review archive selections. No conflicting files are installed or removed automatically.' 4
+        }
+    }
+    $required=switch ($Package.Id) {
+        'community-shaders' { @('SKSE\Plugins\CommunityShaders.dll','Shaders\Features\CloudShadows.ini','Shaders\Features\ExtendedMaterials.ini','Shaders\Features\InverseSquareLighting.ini') }
+        'skylighting' { @('Shaders\Features\Skylighting.ini') }
+        'cs-terrain-helper' { @('Shaders\Features\TerrainHelper.ini') }
+        'cs-terrain-blending' { @('Shaders\Features\TerrainBlending.ini') }
+        default { @() }
+    }
+    foreach ($relative in $required) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Data $relative) -PathType Leaf)) { Stop-Install "Required $($Package.Id) payload is missing: $relative" 'Use the matching official archive; do not substitute an older release or a partial option folder.' 4 }
+    }
+}
+
 function Stage-Package($Package, $Record, [string]$Extracted) {
+    if ($Package.MinimumVersion -and (Get-PackageVersion $Package $Record) -lt [version]$Package.MinimumVersion) {
+        Stop-Install "$($Package.Id) is older than the V2 minimum $($Package.MinimumVersion)." 'Select the reviewed current release; record a verified PackageVersion for supplied archives.' 4
+    }
+    if ($Package.Id -like 'cs-terrain-*') {
+        $core=@($script:Payloads | Where-Object { $_.Package.Id -eq 'community-shaders' })
+        if ($core.Count -ne 1 -or (Get-PackageVersion $Package $Record) -ne (Get-PackageVersion $core[0].Package $core[0].Record)) {
+            Stop-Install 'Community Shaders terrain feature and core versions differ.' 'Use Terrain Helper/Blending feature archives from the same official CS release as the core. Declare PackageVersion for local archives.' 4
+        }
+    }
     $output=New-Directory (Join-Path $script:StagePath $Package.Id)
     $data=New-Directory (Join-Path $output 'Data')
     $root=New-Directory (Join-Path $output 'Root')
@@ -777,54 +858,12 @@ function Stage-Package($Package, $Record, [string]$Extracted) {
             }
             Copy-Tree (Join-Path $base 'Data') $data 'Stage SKSE scripts'
         }
-        'EnbBinaries' {
-            $dlls=@(Get-ChildItem -LiteralPath $Extracted -Recurse -File -Filter 'd3d11.dll' | Where-Object { $_.DirectoryName -match 'WrapperVersion' })
-            if ($dlls.Count -ne 1) { Stop-Install 'The ENB WrapperVersion could not be uniquely identified.' 'Use the official ENBSeries Skyrim SE ZIP, not an InjectorVersion or a preset.' 4 }
-            foreach ($name in @('d3d11.dll','d3dcompiler_46e.dll')) {
-                $source=Join-Path $dlls[0].DirectoryName $name
-                Assert-Pe64 $source; Copy-MappedFile $source (Join-Path $root $name)
-            }
-            $proof=Get-Value $script:Config 'EnbCompatibility' @{}
-            if ($script:Runtime.Minor -ge 7 -and (Get-Hash (Join-Path $root 'd3d11.dll')) -ne [string](Get-Value $proof 'BinarySha256' '')) {
-                Stop-Install 'Downloaded ENB d3d11.dll is not the specifically reviewed runtime-compatible binary.' 'Supply the exact reviewed official ENB archive and valid binary SHA256 evidence. No game files have been changed.' 4
-            }
-        }
-        'EnbShaders' {
-            $relative=[string](Get-Value $override 'RootDirectory' '')
-            if ($relative) { $base=Get-SafeChild $Extracted $relative -AllowRoot }
-            else {
-                $shaderDirectories=@(Get-ChildItem -LiteralPath $Extracted -Recurse -Directory -Filter 'enbseries')
-                if ($shaderDirectories.Count -ne 1) { Stop-Install 'The Shader Core enbseries directory could not be uniquely identified.' 'Use the Silent Horizons 2 - Shader Core main archive, or set sh2-shader-core.RootDirectory to the directory containing enbseries.' 4 }
-                $base=$shaderDirectories[0].Parent.FullName
-            }
-            $shaders=Join-Path $base 'enbseries'
-            if (-not (Test-Path -LiteralPath $shaders -PathType Container) -or -not @(Get-ChildItem -LiteralPath $shaders -Recurse -File).Count) {
-                Stop-Install 'Selected Shader Core payload is missing its shader files.' 'Select the main archive and the directory containing its populated enbseries folder.' 4
-            }
-            Copy-Tree $shaders (Join-Path $root 'enbseries') 'Stage Silent Horizons 2 shaders'
-            if (Test-Path -LiteralPath (Join-Path $base 'Data') -PathType Container) { Copy-Tree (Join-Path $base 'Data') $data 'Stage Shader Core Data' }
-        }
-        'EnbPreset' {
-            $relative=[string](Get-Value $override 'RootDirectory' '')
-            if ($relative) { $base=Get-SafeChild $Extracted $relative -AllowRoot }
-            else {
-                $variants=@(Get-ChildItem -LiteralPath $Extracted -Recurse -File -Filter 'enbseries.ini')
-                if ($variants.Count -eq 1) { $base=$variants[0].DirectoryName }
-                else {
-                    for ($i=0; $i -lt $variants.Count; $i++) { Write-Host ('  {0}. {1}' -f ($i+1),(Get-RelativePath $Extracted $variants[$i].DirectoryName)) }
-                    $choice=Read-Choice 'Cabbage preset variant number (Lux, not ELFX)'; $number=0
-                    if (-not [int]::TryParse($choice,[ref]$number) -or $number -lt 1 -or $number -gt $variants.Count) { Stop-Install 'No valid Cabbage preset variant was selected.' 'Set cabbage.RootDirectory to the directory containing the Lux enbseries.ini.' 4 }
-                    $base=$variants[$number-1].DirectoryName
-                }
-            }
-            if (-not (Test-Path -LiteralPath (Join-Path $base 'enbseries.ini'))) { Stop-Install 'Selected preset is missing enbseries.ini.' 'Select the actual Cabbage Lux preset directory.' 4 }
-            foreach ($file in @(Get-ChildItem -LiteralPath $base -File | Where-Object { $_.Name -match '^(enbseries|enblocal)\.ini$' })) { Copy-MappedFile $file.FullName (Join-Path $root $file.Name) }
-            if (Test-Path -LiteralPath (Join-Path $base 'enbseries')) { Copy-Tree (Join-Path $base 'enbseries') (Join-Path $root 'enbseries') 'Stage Cabbage shaders' }
-            if (Test-Path -LiteralPath (Join-Path $base 'Data')) { Copy-Tree (Join-Path $base 'Data') $data 'Stage Cabbage Data' }
-        }
-        default {
+        'Data' {
             $explicit=[string](Get-Value $override 'DataRoot' '')
             $fomods=@(Get-ChildItem -LiteralPath $Extracted -Recurse -File -Filter 'ModuleConfig.xml' | Where-Object { $_.Directory.Name -eq 'fomod' })
+            if ($Package.Id -eq 'lux-cs' -and ($explicit -or $fomods.Count -eq 0) -and [string](Get-Value $override 'Variant' '') -ne 'Non-Effects11') {
+                Stop-Install 'Lux CS without FOMOD selection needs an explicit reviewed variant.' 'Set Packages.lux-cs.Variant to Non-Effects11 only for a verified complete Non-Effects11 DataRoot/plain payload.' 4
+            }
             if (-not $explicit -and $fomods.Count -eq 1) { Stage-Fomod $Package $fomods[0].Directory.Parent.FullName $fomods[0].FullName $data }
             elseif (-not $explicit -and $fomods.Count -gt 1) { Stop-Install 'Archive has multiple FOMOD installers.' 'Select a reviewed DataRoot override instead of mixing alternatives.' 4 }
             else { Copy-Tree (Find-PayloadRoot $Package $Extracted) $data ('Stage '+$Package.Id) }
@@ -838,13 +877,15 @@ function Stage-Package($Package, $Record, [string]$Extracted) {
                 }
             }
         }
+        default { Stop-Install "Unsupported package kind: $($Package.Kind)" 'Use only reviewed V2 Data, Skse or Tool packages.' 4 }
     }
     foreach ($file in @(Get-ChildItem -LiteralPath $root -Recurse -File)) {
         $relative=Get-RelativePath $root $file.FullName
-        if ($relative -notmatch '^(?i)(skse64_[^\\]+\.(dll|exe)|d3d11\.dll|d3dcompiler_46e\.dll|enbseries\.ini|enblocal\.ini|enbseries\\.+)$') {
-            Stop-Install "Disallowed game-root payload: $relative" 'Root writes are restricted to SKSE and ENB; original game executables cannot come from mod archives.' 4
+        if ($relative -notmatch '^(?i)skse64_[^\\]+\.(dll|exe)$') {
+            Stop-Install "Disallowed game-root payload: $relative" 'V2 root writes are restricted to SKSE; original game executables cannot come from mod archives.' 4
         }
     }
+    Assert-ShaderPayload $Package $data
     foreach ($file in @(Get-ChildItem -LiteralPath $data -Recurse -File)) {
         if ($file.Extension -in @('.exe','.ps1','.bat','.cmd','.vbs')) { Stop-Install "Executable/script found in Data payload: $($file.FullName)" 'Review the author archive and select the actual game-data payload; do not install bundled tool/install folders.' 4 }
         if ($file.DirectoryName -eq $data -and $file.Extension -in @('.esm','.esp','.esl')) { $script:PlannedPlugins[$file.Name]=$true }
@@ -1009,7 +1050,8 @@ function Assert-NativeCompatibility {
         foreach ($directory in @((Join-Path $payload.Data 'SKSE\Plugins'),(Join-Path $payload.Data 'KiLoader'))) {
           if (Test-Path -LiteralPath $directory) {
             foreach ($file in @(Get-ChildItem -LiteralPath $directory -Recurse -File -Filter '*.dll')) {
-                $version=[string](Get-Value (Get-PackageOverride $payload.Package) 'NativeVersion' $payload.Record.Version)
+                $override=Get-PackageOverride $payload.Package
+                $version=[string](Get-Value $override 'NativeVersion' (Get-Value $override 'PackageVersion' $payload.Record.Version))
                 $relative=Get-RelativePath $payload.Data $file.FullName
                 $files[$relative]=@{File=$file.FullName; Name=$file.Name; Package=$payload.Package.Id; Version=$version}
             }
@@ -1051,10 +1093,7 @@ function Configure-Inis {
     Set-IniValues (Join-Path $script:IniPath 'SkyrimPrefs.ini') @{
         Display=@{bSAOEnable='0';bEnableImprovedSnow='0';bVolumetricLightingEnable='1';bUse64bitsHDRRenderTarget='1';bDrawLandShadows='1';bDoDepthOfField='1'}
     }
-    Set-IniValues (Join-Path $script:GameRoot 'enbseries.ini') @{
-        EFFECT=@{EnableTerrainParallax='false';EnableComplexGrass='true';EnableComplexGrassCollisions='true';EnableTerrainBlending='true';EnableComplexParallax='true';EnableComplexParallaxShadows='true';EnableComplexTerrainParallax='true';EnableComplexTerrainParallaxShadows='true';EnableComplexMaterial='true';EnableDynamicCubemap='false'}
-    }
-    Write-Status 'Configured real Skyrim INIs and the Fantasia-compatible ENB complex-material settings' 'OK'
+    Write-Status 'Configured real Skyrim INIs; Community Shaders feature settings come from the staged core/NAT.CS payloads' 'OK'
 }
 
 function Get-Tool([string]$Id, [string[]]$Names) {
@@ -1188,7 +1227,7 @@ function Run-Generator([string]$Id, [string]$ToolId, [string[]]$Names, [string]$
         'PGPatcher' {
             $diff=Join-Path $output 'ParallaxGen_Diff.json'
             if (-not (Test-Path -LiteralPath $diff) -or -not @($files | Where-Object { $_.Extension -eq '.nif' }).Count) {
-                Stop-Install 'PGPatcher produced no validated patched-mesh output.' 'Set the fresh output folder shown above, disable ZIP output, select SSE / no mod manager, enable ENB complex-material/parallax patching, and rerun.' 7
+                Stop-Install 'PGPatcher produced no validated patched-mesh output.' 'Set the fresh output folder shown above, disable ZIP output, select SSE / no mod manager, enable Community Shaders-compatible complex-material/parallax patching, and rerun.' 7
             }
             Get-Content -LiteralPath $diff -Raw | ConvertFrom-Json | Out-Null
         }
@@ -1243,19 +1282,31 @@ function Build-SteamBridge {
     Assert-Pe64 $script:BridgeExecutable
 }
 
+function Get-LaunchFiles {
+    $files=@('SkyrimSE.exe','skse64_loader.exe',('skse64_'+$script:Runtime.ToString(3).Replace('.','_')+'.dll'),'Data\SKSE\Plugins\CommunityShaders.dll')
+    foreach ($directory in @((Join-Path $script:DataPath 'SKSE\Plugins'),(Join-Path $script:DataPath 'KiLoader'))) {
+        if (Test-Path -LiteralPath $directory) {
+            foreach ($file in @(Get-ChildItem -LiteralPath $directory -Recurse -File -Filter '*.dll')) { $files+=Get-RelativePath $script:GameRoot $file.FullName }
+        }
+    }
+    foreach ($name in @('CloudShadows','ExtendedMaterials','InverseSquareLighting','Skylighting','TerrainHelper','TerrainBlending')) { $files+='Data\Shaders\Features\'+$name+'.ini' }
+    return @($files | Sort-Object -Unique)
+}
+
 function Install-SteamBridge {
     Set-Phase 'Applying the Steam launch bridge (last installation step)'
-    $files=@('SkyrimSE.exe','skse64_loader.exe',('skse64_'+$script:Runtime.ToString(3).Replace('.','_')+'.dll'),'d3d11.dll','d3dcompiler_46e.dll')
+    Assert-CompatibilityDecisions
+    $files=@(Get-LaunchFiles)
     $hashes=@{}
     foreach ($name in $files) { $hashes[$name]=Get-Hash (Join-Path $script:GameRoot $name) }
-    $receipt=@{SchemaVersion=1; Runtime=$script:Runtime.ToString(3); SteamAppId='489830'; Hashes=$hashes; InputSignature=$script:InputSignature; CompletedUtc=[DateTime]::UtcNow.ToString('o')}
+    $receipt=@{SchemaVersion=2; InstallListVersion='V2'; RenderingFramework='CommunityShaders'; Runtime=$script:Runtime.ToString(3); SteamAppId='489830'; Hashes=$hashes; InputSignature=$script:InputSignature; CompletedUtc=[DateTime]::UtcNow.ToString('o')}
     Write-Json (Join-Path $script:GameRoot 'SteamSkyrimBridge.json') $receipt
     $launcher=Join-Path $script:GameRoot 'SkyrimSELauncher.exe'
     $stock=Join-Path $script:GameRoot 'SkyrimSELauncher.stock.exe'
     if (-not (Test-Path -LiteralPath $stock) -and -not (Test-Path -LiteralPath (Join-Path $script:GameRoot 'SteamSkyrimBridge.installed.json'))) { Copy-Item -LiteralPath $launcher -Destination $stock }
     $pending=Join-Path $script:GameRoot 'SkyrimSELauncher.pending.exe'
     Copy-Item -LiteralPath $script:BridgeExecutable -Destination $pending -Force
-    [IO.File]::Replace($pending,$launcher,$null)
+    [IO.File]::Replace($pending,$launcher,[NullString]::Value)
     Write-Json (Join-Path $script:GameRoot 'SteamSkyrimBridge.installed.json') @{Hash=Get-Hash $launcher;CompletedUtc=$receipt.CompletedUtc}
     Write-Status 'Normal Steam Play now targets the hidden SKSE bridge; SkyrimSE.exe was not renamed or modified' 'OK'
 }
@@ -1276,13 +1327,12 @@ function ConvertTo-CanonicalJson($Value) {
 }
 
 function Assert-CompatibilityDecisions {
-    Write-Status 'Terrain setup: current Fantasia with Terrain Helper' 'OK'
-    if ($script:Runtime.Major -eq 1 -and $script:Runtime.Minor -ge 7) {
-        $review=Get-Value $script:Config 'EnbCompatibility' @{}
-        if ($script:Runtime.ToString(3) -notin @(Get-Value $review 'Runtimes' @()) -or [string](Get-Value $review 'EvidenceUrl' '') -notmatch '^https://' -or [string](Get-Value $review 'BinarySha256' '') -notmatch '^[a-fA-F0-9]{64}$') {
-            Stop-Install "ENBSeries/Cabbage compatibility with Skyrim $($script:Runtime.ToString(3)) has not been established. Terrain Helper's author specifically warns about ENB on 1.7." 'A newer SKSE is not proof of ENB support. Verify an author-supported ENB binary, then record EnbCompatibility.Runtimes/EvidenceUrl/BinarySha256. Otherwise this setup needs a separately approved, reviewed runtime downgrade or a changed graphics list. This script does neither silently.' 3
+    foreach ($relative in @('d3d11.dll','d3dcompiler_46e.dll','enbseries.ini','enblocal.ini','enbseries','Data\Shaders\Features\Effects11.ini')) {
+        if (Test-Path -LiteralPath (Join-Path $script:GameRoot $relative)) {
+            Stop-Install "Existing ENB/Effects11 component conflicts with V2: $relative" 'Review and remove that old component before Prepare/Install. The installer does not remove existing mods automatically.' 3
         }
     }
+    Write-Status 'V2: Community Shaders + NAT.CS III + Non-Effects11 Lux CS, with Fantasia/Terrain Helper' 'OK'
 }
 
 
@@ -1304,12 +1354,8 @@ function Set-GenerationSignature {
     } finally { $hasher.Dispose() }
     $extra=@($script:InputSignature,$dataHash,($script:ActiveOrder -join '|'))
     foreach ($name in @('Skyrim.ini','SkyrimPrefs.ini')) { $extra+=Get-Hash (Join-Path $script:IniPath $name) }
-    foreach ($name in @('enbseries.ini','d3d11.dll','d3dcompiler_46e.dll','skse64_loader.exe')) { $extra+=Get-Hash (Join-Path $script:GameRoot $name) }
+    foreach ($name in @('SkyrimSE.exe','skse64_loader.exe',('skse64_'+$script:Runtime.ToString(3).Replace('.','_')+'.dll'))) { $extra+=Get-Hash (Join-Path $script:GameRoot $name) }
     $script:InputSignature=Get-TextHash ($extra -join '|')
-    $proof=Get-Value $script:Config 'EnbCompatibility' @{}
-    if ($script:Runtime.Minor -ge 7 -and (Get-Hash (Join-Path $script:GameRoot 'd3d11.dll')) -ne [string](Get-Value $proof 'BinarySha256' '')) {
-        Stop-Install 'ENB d3d11.dll does not match the specifically reviewed 1.7-compatible binary.' 'Use the exact reviewed author binary or update its compatibility evidence/checksum after verification; do not bypass the check by inventing a hash.' 8
-    }
     Write-Status ('Finalized base signature computed from '+$count+' files; generator outputs are chained separately') 'OK'
 }
 
@@ -1382,8 +1428,14 @@ function Initialize-Paths {
     $script:StatePath=Join-Path $script:WorkRoot 'installation.state.json'
     $script:Payloads=New-Object 'Collections.Generic.List[object]'
     $script:OwnedGenerated=@{}
-    $script:Config=if (Test-Path -LiteralPath $ConfigPath) { Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json } else { @{} }
-    if ([int](Get-Value $script:Config 'SchemaVersion' 1) -ne 1) { Stop-Install 'Unsupported configuration schema.' 'Use the supplied SchemaVersion 1 configuration.' 3 }
+    if (-not (Test-Path -LiteralPath $ConfigPath)) {
+        $defaultConfig=Join-Path $PSScriptRoot 'SkyrimMods.config.json'
+        $exampleConfig=Join-Path $PSScriptRoot 'SkyrimMods.config.example.json'
+        if ((Get-FullPath $ConfigPath) -ne (Get-FullPath $defaultConfig) -or -not (Test-Path -LiteralPath $exampleConfig)) { Stop-Install "Configuration not found: $ConfigPath" 'Use the supplied V2 example or correct -ConfigPath.' 3 }
+        $ConfigPath=$exampleConfig
+    }
+    $script:Config=Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ([int](Get-Value $script:Config 'SchemaVersion' 0) -ne 2) { Stop-Install 'V2 requires configuration SchemaVersion 2.' 'Use SkyrimMods.config.example.json as the V2 base; migrate applicable package/choice pins after reviewing them.' 3 }
     $gameExe=Join-Path $script:GameRoot 'SkyrimSE.exe'
     if (-not (Test-Path -LiteralPath $gameExe) -or -not (Test-Path -LiteralPath $script:DataPath)) { Stop-Install 'SkyrimSE.exe/Data were not found.' 'Point -GamePath to the Steam Skyrim Special Edition installation.' 3 }
     $fileVersion=(Get-Item -LiteralPath $gameExe).VersionInfo
@@ -1393,9 +1445,15 @@ function Initialize-Paths {
     if ($script:Runtime -ne $expected) { Stop-Install "Runtime changed: found $script:Runtime, reviewed setup expects $expected." 'Recheck SKSE and every native DLL against the new runtime, then explicitly update ExpectedRuntime and compatibility evidence. No automatic downgrade or executable renaming is performed.' 3 }
     $list=Join-Path $PSScriptRoot 'Install order.txt'
     if (-not (Test-Path -LiteralPath $list)) { Stop-Install 'Install order.txt is missing.' 'Keep the original install list beside this installer.' 3 }
-    $script:ListHash=Get-Hash $list
+    $activeList=Get-ActiveInstallList (Get-Content -LiteralPath $list -Raw -Encoding UTF8)
+    $script:ListHash=Get-TextHash $activeList.Text
     $expectedList=[string](Get-Value $script:Config 'InstallListSha256' '')
-    if ($expectedList -and $expectedList -ne $script:ListHash) { Stop-Install 'Install order.txt changed after this installer was authored.' 'Review the catalogue/order against your edited list before updating InstallListSha256; the script does not infer dependencies from arbitrary prose.' 3 }
+    if ([string](Get-Value $script:Config 'InstallListVersion' '') -ne 'V2' -or -not $expectedList -or $expectedList -ne $script:ListHash) { Stop-Install 'Active V2 list differs from the reviewed installer configuration.' 'Review the V2 catalogue/order, then set InstallListVersion: V2 and pin the normalized V2 section hash in InstallListSha256. Historical V1 text does not affect this hash.' 3 }
+    if ([string](Get-Value $script:Config 'RenderingFramework' '') -ne 'CommunityShaders' -or
+        [string](Get-Value $script:Config 'LuxCsVariant' '') -ne 'Non-Effects11' -or
+        (Get-Value $script:Config 'Effects11' $true) -isnot [bool] -or (Get-Value $script:Config 'Effects11' $true)) {
+        Stop-Install 'V2 requires CommunityShaders, Non-Effects11 Lux CS and Effects11: false.' 'Keep the reviewed V2 rendering configuration; NAT.CS III excludes Effects11.' 3
+    }
     $script:Catalogue=@(Get-Catalogue)
     $script:TerrainStrategy=[string](Get-Value $script:Config 'TerrainStrategy' 'TerrainHelper')
     if ($script:TerrainStrategy -ne 'TerrainHelper') { Stop-Install 'This install list requires the Terrain Helper setup.' 'Set TerrainStrategy to TerrainHelper. The legacy terrain route has been removed from this installer.' 3 }
@@ -1465,6 +1523,7 @@ function Invoke-Preparation {
 
 function Invoke-Installation {
     Assert-NotRunning
+    Assert-CompatibilityDecisions
     Assert-NoElevationLayers
     Assert-NoChildLinks $script:GameRoot
     Assert-OrdinaryDirectory $script:IniPath
@@ -1486,7 +1545,7 @@ function Invoke-Installation {
     Build-SteamBridge
     # Prevent an existing bridge from launching a partially replaced setup.
     $receipt=Join-Path $script:GameRoot 'SteamSkyrimBridge.json'
-    if (Test-Path -LiteralPath $receipt) { Write-Json $receipt @{SchemaVersion=1;Pending=$true;Reason='Installation in progress or interrupted; rerun Install -Resume.'} }
+    if (Test-Path -LiteralPath $receipt) { Write-Json $receipt @{SchemaVersion=2;Pending=$true;Reason='Installation in progress or interrupted; rerun Install -Resume.'} }
     $script:DataTouched=$true
     Write-Json $script:StatePath @{Status='Installing';InputSignature=$script:InputSignature;Log=$script:LogPath}
     Clear-OwnedGenerated
@@ -1511,7 +1570,8 @@ function Invoke-Installation {
     Run-Generator 'PGPatcher' 'pgpatcher' @('PGPatcher.exe','ParallaxGen.exe') @'
 Set game type Skyrim Special Edition (SSE), game path to the Steam Skyrim folder,
 conflict/mod manager to None (direct install), output to the fresh folder above,
-and disable ZIP output. Enable ENB complex-material/parallax patching, not PBR.
+and disable ZIP output. Enable complex-material/parallax patching compatible with
+Community Shaders Extended Materials for these assets; leave True PBR conversion off.
 Run Start Patching and review all errors. Close only after successful completion.
 '@
     Sort-Plugins
@@ -1548,9 +1608,9 @@ try {
         Write-Status "READ-ONLY PLAN: Skyrim $script:Runtime; $($script:Catalogue.Count) packages including required dependencies/tools"
         foreach ($package in $script:Catalogue) { Write-Host ('  {0,7:g}  {1,-25} {2}' -f $package.Order,$package.Id,$package.Name) }
         Write-Status 'Install order: base mods -> LOOT -> PGPatcher -> LOOT -> xLODGen terrain -> TexGen -> DynDOLOD -> LOOT -> Steam bridge'
-        Write-Status 'Cabbage root-file order: ENBSeries binaries -> Silent Horizons 2 Shader Core -> Cabbage Lux preset (step 23, before generators)'
+        Write-Status 'V2 rendering order: NAT weather ESP -> Community Shaders -> Skylighting -> NAT.CS III -> Light Placer -> ISL Helper -> Lux Orbis -> Lux -> Non-Effects11 Lux CS'
         Write-Status 'Nexus Premium/API key enables automatic downloads; free accounts supply browser-downloaded archives. FOMOD choices and first-time generation remain guided.'
-        Write-Status ("Terrain strategy: $script:TerrainStrategy. ENB support for runtime 1.7 and unreviewed native packages require evidence; Prepare/Install have safety gates.") 'WARN'
+        Write-Status ("Terrain strategy: $script:TerrainStrategy. Cloud Shadows is bundled in CS; Skylighting and terrain feature configs install separately. Native DLLs require reviewed runtime evidence.")
         Write-Status 'No files changed and no tools/game launched.' 'OK'
     } else {
         Assert-CompatibilityDecisions

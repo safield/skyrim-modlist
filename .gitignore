@@ -1,7 +1,11 @@
-# Track only the installer and its documentation.
+# Track installer sources, reviewed defaults, tests and documentation; ignore game files.
 /*
 !/.gitignore
 !/Install-SkyrimMods.ps1
 !/Install order.txt
 !/SkyrimMods.README.md
 !/SkyrimDowngrade.README.md
+!/SkyrimMods.config.example.json
+!/SteamSkyrimBridge.cs
+!/SteamSkyrimBridge.manifest
+!/tests/

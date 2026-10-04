@@ -1,265 +1,224 @@
-# Skyrim mod installer
+# Skyrim V2 mod installer
 
-Written for `Install order.txt` and the inspected Steam runtime **1.7.104.0**.
-Prepare/Install have **not been run**. No mods, game binaries or Steam settings
-have been changed by authoring it. Static checks do not establish that the game or
-Steam Remote Play will actually work; that needs a later authorized live test.
+The installer follows **V2 USE THIS ONE** in `Install order.txt`, on the existing
+Steam Skyrim runtime **1.7.104.0**. It uses **Community Shaders, NAT.CS III and
+Non-Effects11 Lux CS**. The historical V1 section is ignored. Configuration pins
+the normalized V2 section so edits to historical V1 do not invalidate the plan;
+changes to V2 require reviewing the catalogue and updating that pin.
 
-The separately authorized downgrade to **1.6.1170.0** has been prepared with
-verified replacement files and backups. Deployment is pending because Dota 2
-is running and applying the downgrade requires a brief Steam restart. See
-[the downgrade record and steps](SkyrimDowngrade.README.md) for the current
-state, local artifacts, verification, restoration and remaining setup work.
+The downgrade was cancelled on October 4, 2026. No downgrade, mod installation,
+INI changes or Steam changes were performed while updating this installer.
+Backups remain available; see [the cancelled downgrade record](SkyrimDowngrade.README.md).
+Prepare and Install are guided operations to run when installation is wanted.
+A live game/Remote Play test is still required after installation.
 
-## Terrain setup and remaining ENB compatibility check
+## V2 graphics and lighting order
 
-The terrain setup uses current Fantasia with Terrain Helper and powerofthree's
-Tweaks (`TerrainStrategy: "TerrainHelper"`). Terrain Parallax Blending Fix has
-been removed from the install list and catalogue, along with its legacy terrain
-staging and INI redirects.
-[Author's compatibility notes](https://www.nexusmods.com/skyrimspecialedition/mods/143149).
+| Step | Package / behavior |
+| --- | --- |
+| 1–18 | V2 meshes, textures, vegetation, water, faces and UI, in the listed overwrite order |
+| 19 | NAT.ENB **weather ESP only**, exactly `NAT.ENB - ESP WEATHER PLUGIN v3.1.1C - Fixed` |
+| 20 | Official Community Shaders core, minimum 1.9.1 |
+| 21 | Skylighting, minimum 1.5.2; Cloud Shadows is already bundled with CS |
+| 22 | NAT.CS III overwrites the earlier NAT weather files |
+| 23 | Light Placer, minimum 5.0.0 |
+| 24 | ISL Helper SKSE, minimum 1.0.6 |
+| 25–26 | Lux Orbis, Lux, their resources/updates and applicable official patches |
+| 27 | Lux CS, minimum 2.6.0; **Non-Effects11**, with Light Placer/ISL and applicable Orbis options |
+| 28–31 | PGPatcher → xLODGen terrain → TexGen → DynDOLOD 3 |
 
-The supplied configuration still blocks Prepare/Install before downloads or
-changes because ENB runtime compatibility has not been established. SKSE
-support for the installed runtime does not establish ENBSeries support.
-Terrain Helper's 1.7-support changelog warns that ENB does not work on 1.7.
-For a supported binary, `EnbCompatibility` must record the runtime, an
-authoritative HTTPS evidence URL and the **d3d11.dll** SHA256 (not the archive's
-hash). No such support is asserted by the default config. A runtime downgrade
-or a different graphics stack needs separate review and is not performed
-silently. [SKSE releases](https://skse.silverlock.org/),
-[ENB author](https://www.enbdev.com/),
-[Terrain Helper changelog](https://www.nexusmods.com/skyrimspecialedition/mods/143149?tab=logs).
+Community Shaders 1.9 supports the 1.7 game runtimes. The official core includes
+Cloud Shadows, Extended Materials and Inverse Square Lighting. Skylighting is
+a separate feature package. The installer validates those payloads and rejects
+an Effects11 feature file, including one bundled in an AIO archive.
+[CS changelog](https://www.nexusmods.com/skyrimspecialedition/mods/86492?tab=logs),
+[official 1.9.1 release](https://github.com/community-shaders/skyrim-community-shaders/releases/tag/v1.9.1),
+[Skylighting](https://www.nexusmods.com/skyrimspecialedition/mods/139352).
 
-Do not fill in compatibility evidence merely to defeat a safety check. Also
-review ENB Terrain Blending Fix's native DLL against the selected runtime: the
-default configuration does not assert unverified support for that package.
+NAT.CS requires the older NAT weather ESP as its base; its ENB name does not
+authorize installing ENB binaries or a preset. Keep optional NAT.CS water
+shadows unselected: they require an additional brightness/reflection fix
+outside this V2 catalogue.
+[NAT.CS requirements](https://www.nexusmods.com/skyrimspecialedition/mods/139567).
 
-## Steam / Remote Play design
+The Lux CS FOMOD automatically chooses the unique Non-Effects11 option when
+its group allows exactly one choice and no choice is saved. A saved Effects11
+choice fails with a correction message. An installer lacking an identifiable
+Non-Effects11 choice also fails. A reviewed plain archive or `DataRoot` override
+requires `Packages.lux-cs.Variant: "Non-Effects11"`. Select the Light Placer/ISL
+and Orbis options when offered; other FOMOD choices remain guided.
+[Lux CS requirements and 2.6 variants](https://www.nexusmods.com/skyrimspecialedition/mods/153919),
+[Light Placer runtime support](https://www.nexusmods.com/skyrimspecialedition/mods/127557?tab=logs).
 
-All game assets install directly into the real `Data` directory. Actual
-`plugins.txt`, `loadorder.txt` and Skyrim INIs belong to the Windows account
-running Steam; there is no mod-manager profile or virtual filesystem to mount.
+Prerequisites install before their consumers: matching SKSE, Address Library,
+powerofthree's Tweaks, Terrain Helper, DynDOLOD resources/DLL and SKSE Menu
+Framework for ISL Helper's UI. CS Terrain Helper and Terrain Blending feature
+archives follow the core and come from its **same official release**. They
+enable the existing Fantasia/Terrain Helper and complex-material setup.
+[Terrain Helper](https://www.nexusmods.com/skyrimspecialedition/mods/143149),
+[ISL Helper](https://www.nexusmods.com/skyrimspecialedition/mods/179132),
+[SKSE Menu Framework](https://www.nexusmods.com/skyrimspecialedition/mods/120352).
 
-After generation and validation succeed, the installer compiles
-`SteamSkyrimBridge.cs` into the standard `SkyrimSELauncher.exe` entrypoint:
+The old ENBSeries, Cabbage, Silent Horizons Shader Core, ENB Extender, KiLoader,
+EVLaS, ENB blending fix and Cabbage water patch packages are removed.
+Existing ENB root components or Effects11 stop Prepare/Install before any
+downloads or deployment; they are not deleted automatically. Water for ENB
+remains at step 14 because it is explicitly in V2; choose its CS-compatible
+options.
 
-```text
-Normal Steam Play / Remote Play
-  -> hidden SkyrimSELauncher.exe bridge
-  -> skse64_loader.exe -waitforclose
-  -> original SkyrimSE.exe
-```
-
-The game executable keeps its original name/content. SKSE is still required
-internally, but you do not manually open SKSE, PowerShell or another launcher
-to play. The bridge waits for the game session, inherits Steam's environment,
-uses app ID 489830, requests no elevation, and verifies critical launch hashes.
-Errors show a specific message and write a per-user launch log. It never falls
-back to an unmodded game. [Official SKSE loader option source](https://github.com/ianpatt/skse64/blob/master/skse64_loader/Options.cpp).
-
-Leave Skyrim's Steam Launch Options empty/default. Remove any Windows
-"Run as administrator" flags on Skyrim, its launcher and SKSE. Steam file
-verification or a game update can restore the stock launcher/change runtime;
-re-review compatibility and rerun the installer afterward. This script does not
-alter Steam update settings or claim it can prevent Steam replacing files.
-One stock launcher copy is retained only for access to graphics settings.
-
-## Commands, only when you authorize running
+## Commands and configuration
 
 Use Windows PowerShell 5.1 or later under the **same Windows account as Steam**.
-Installation into Program Files may require elevating that same account.
-Start/exit the stock game once beforehand to initialize its real INIs.
+Initialize the stock game's real INIs once before installing. Program Files
+deployment may require elevating that same account.
 
 ```powershell
-# Read-only catalogue/plan. Also the default if no Mode is specified.
+# Read-only; also the default mode.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-SkyrimMods.ps1 -Mode Plan
 
-# Downloads, CRC-tests, extracts and stages options; does not change Skyrim.
+# Downloads, CRC-tests, extracts and stages; does not change Skyrim.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-SkyrimMods.ps1 -Mode Prepare -WorkPath 'D:\SkyrimModInstaller'
 
-# Direct install and guided generation, then apply the Steam bridge LAST.
+# Direct install, guided generators, then the Steam bridge.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-SkyrimMods.ps1 -Mode Install -WorkPath 'D:\SkyrimModInstaller'
 
-# Same WorkPath/config/account; reuse only verified, matching generator outputs.
+# Same work directory/config/account; reuse verified matching outputs.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-SkyrimMods.ps1 -Mode Install -WorkPath 'D:\SkyrimModInstaller' -Resume
 ```
 
-Keep WorkPath on a local SSD, outside Skyrim, in a dedicated ordinary directory.
-Default is `%LOCALAPPDATA%\SkyrimModInstaller`. Allow substantial disk headroom:
-archives, extracted files, staging, Data and outputs can coexist. Configured
-160 GiB work/80 GiB game thresholds are conservative minimum checks, **not** a
-promise about total space needed. Deployment checks actual staged byte totals.
-If work and game share a drive, their requirements consume that same capacity.
-Use the same WorkPath on all runs. Prepare and subsequent Install may restage
-assets; previous staging runs are retained, not silently recursively deleted.
+The local `SkyrimMods.config.json` has been migrated to SchemaVersion 2 and V2's
+hash. It stays untracked so personal archive paths and choices remain local.
+The tracked `SkyrimMods.config.example.json` contains reviewed defaults; it is
+used without creating files when the default local config is absent. An
+explicit missing `-ConfigPath` is an error. To customize a fresh checkout:
 
-## Downloads and choices
+```powershell
+Copy-Item .\SkyrimMods.config.example.json .\SkyrimMods.config.json
+```
 
-This is a robust **guided** installer, not a promise of unattended installation:
+Keep `RenderingFramework: "CommunityShaders"`, `LuxCsVariant: "Non-Effects11"`
+and `Effects11: false`. Old SchemaVersion 1 configs must be migrated. The
+runtime remains pinned; a Steam runtime update requires rechecking SKSE,
+Address Library and every native DLL.
 
-- Nexus Premium plus a personal API key enables arbitrary automatic Nexus
-  downloads. The key is prompted invisibly or read from the process environment
-  `NEXUS_API_KEY`; it is not put in config or intentionally logged. Free accounts
-  download through Nexus in a browser and provide the downloaded archive paths.
-  Access restrictions/captchas are never bypassed. [Nexus API](https://api-docs.nexusmods.com/).
-- Portable 7-Zip, xLODGen and LOOT come from their official GitHub releases.
-  ENB binaries come from the author's site; if HTTPS resolution fails, supply
-  the official browser-downloaded ZIP. No ENB mirror is invented.
-- Downloads resume, reject HTTP error bodies and lock archive SHA256/file IDs.
-  Every script-managed file download uses `curl --limit-rate 11250000`:
-  11.25 MB/s (90 Mbps), approximately 30% of a 300 Mbps connection. Downloads
-  are sequential, and the cap also applies to retries/resumed transfers and
-  portable-tool downloads. Browser downloads supplied manually are outside
-  the script's control.
-  `-RefreshDownloads` deliberately re-resolves versions; it also invalidates
-  generation when inputs change. Cached files are integrity checked.
-- FOMOD groups display concise descriptions and quality/setup hints. Choose
-  their exact applicable options. Invalid cardinality, unavailable choices,
-  missing sources and unsupported dependency instructions fail closed. Exact
-  names are recorded in `fomod.choices.json` for later runs. A new/reviewed
-  payload layout can be supplied explicitly; all option folders are never
-  blindly mixed into Data.
-- Native SKSE/KiLoader DLLs require explicit author runtime evidence and minimum
-  versions, where recorded. An unknown existing native DLL is not silently
-  treated as compatible. Archive authentication/CRC/hash checks are integrity
-  checks, not a malware guarantee or a proof of runtime compatibility.
-
-`SkyrimMods.config.json` can pin each package. Package IDs appear in Plan.
-Example entries (replace example values with real verified values):
+Each package can use `FileId`, `Sha256`, `LocalArchive`, `NamePattern`,
+`DataRoot` or `ToolExecutable`. Plan displays all valid IDs. For supplied
+archives with minimum-version checks, record the verified author version as
+`PackageVersion` or `NativeVersion`. Local CS terrain features must declare
+the same `PackageVersion` as the core. Example package fragment:
 
 ```json
 {
   "Packages": {
-    "skyland": { "FileId": 123456, "Sha256": "AUTHOR_OR_VERIFIED_ARCHIVE_SHA256" },
-    "skse": { "LocalArchive": "D:\\Downloads\\skse64-matching-runtime.7z" },
-    "wildlands-4k": { "LocalArchive": "D:\\Downloads\\NotWL-options.7z" },
-    "some-valid-package-id": { "DataRoot": "ReviewedVariant\\Data" }
+    "community-shaders": {
+      "LocalArchive": "D:\\Downloads\\CommunityShaders.zip",
+      "PackageVersion": "1.9.1"
+    },
+    "lux-cs": {
+      "LocalArchive": "D:\\Downloads\\Lux-CS.7z",
+      "PackageVersion": "2.6.0"
+    }
   },
   "FomodSelections": {
     "package-id/Exact step name/Exact group name": ["Exact option name"]
-  },
-  "NativeCompatibility": {
-    "some-plugin.dll": {
-      "Runtimes": ["1.7.104"],
-      "MinimumVersion": "1.2.3",
-      "EvidenceUrl": "https://author.example/specific-supported-release"
-    }
   }
 }
 ```
 
-This fragment is illustrative, not a second executable configuration. Unknown
-package IDs fail validation. Supplied native archives need a verified
-`NativeVersion` when their Nexus version is unavailable. `DataRoot` bypasses
-FOMOD selection and therefore must point at an already reviewed complete
-payload, not an entire installer full of alternatives. `ToolExecutable` and
-`cabbage.RootDirectory` and `sh2-shader-core.RootDirectory` can disambiguate
-relative archive locations. For Shader Core, this is the directory containing
-`enbseries`; for Cabbage, it contains the selected Lux `enbseries.ini`.
+This fragment is illustrative; merge it into the full config. `DataRoot`
+bypasses FOMOD selection and must contain the complete reviewed chosen payload,
+rather than a folder of alternatives. Native DLLs additionally require
+`NativeCompatibility` with supported `Runtimes`, an authoritative HTTPS
+`EvidenceUrl` and any minimum version/alpha. Unknown existing native DLLs
+fail validation. ISL Helper's author says 1.0.6 supports the latest game
+versions; its 1.7.104 entry is inferred from that release statement.
+[ISL Helper changelog](https://www.nexusmods.com/skyrimspecialedition/mods/179132?tab=logs).
 
-Alternatively `-ArchiveDirectory 'D:\Downloads\ReviewedMods'` finds archives
-named exactly after package IDs, e.g. `smim.7z`, `skyland.zip`. Every Nexus package
-must be mapped/supplied to work without an API key. Never store keys in JSON.
-`-NonInteractive` fails clearly on unresolved choices/generation; it does not
-guess. First-time generators require interaction; verified resume checkpoints
-can be reused without re-opening their interfaces.
+Keep WorkPath on a local SSD outside Skyrim, in a dedicated ordinary directory.
+Default is `%LOCALAPPDATA%\SkyrimModInstaller`. The 160 GiB work/80 GiB game
+checks are minimum headroom checks; archives, extraction, staging, Data and
+generated outputs can coexist. Use the same WorkPath throughout. Staging from
+earlier runs is retained.
 
-## Order and documented interpretation of the list
+## Downloads, asset choices and generators
 
-The numbered base overwrite order is preserved, with prerequisites before
-their consumers and author updates/compatibility packages immediately after
-their corresponding base mod. Plugin order is separate: masters are inspected,
-missing/circular masters and engine limits are checked, and LOOT sorts the
-selected plugins. Sorting failure is not treated as success merely because
-the program exited with code 0.
+Nexus Premium and a personal API key allow automatic Nexus downloads. The key
+is prompted invisibly or read from process environment `NEXUS_API_KEY`; never
+store it in JSON. Free accounts provide browser-downloaded archives.
+`-ArchiveDirectory 'D:\Downloads\ReviewedMods'` accepts files named after
+package IDs, such as `smim.7z`. Official GitHub releases provide CS terrain
+features, portable 7-Zip, xLODGen and LOOT.
+[Nexus API](https://api-docs.nexusmods.com/).
 
-- Original ERM page is unavailable; catalogue uses the maintained ERM successor
-  with separate mesh/texture downloads and ENB complex material, not PBR.
-  [ERM successor](https://www.nexusmods.com/skyrimspecialedition/mods/121336).
-- QW includes Cathedral Pine Grass, Origins of Forest and Folkvangr prerequisites.
-  Skoglendi follows QW as listed, winning conflicting grass records/assets.
-  This does **not** create a new hybrid grass patch. If LOOT reverses that intended
-  order, the script asks for an explicit LOOT rule rather than pretending the
-  overwrite/install order controls plugin conflicts.
-- Cathedral suite expands to 13 named plant releases plus the Mountain Flowers
-  Hearthfire patch. Xavbio expands to 22 armor/weapon-family releases; it is not
-  an imaginary AIO and does not add unrelated clothing/robe releases. Select
-  applicable installed-CC options, not patches for paid creations you lack.
-- Nordic Faces uses full textures/body, full loose FaceTint, then the author's
-  Non-SMP FaceGeom. This retains full-resolution faces without introducing hair
-  physics and its extra runtime-sensitive DLL requirements. [Nordic Faces files](https://www.nexusmods.com/skyrimspecialedition/mods/40658?tab=files).
-- NAT installs its weather module, not its own competing ENB preset. Cabbage
-  uses its Lux variant and author Water for ENB patch. Lux Via **resources only**
-  are a lighting prerequisite, not permission to add the Via world overhaul.
-- Cabbage stays at **step 23**, after NAT III, Lux Orbis, Lux and the selected
-  terrain setup, before PGPatcher and all LOD generation. Its root files deploy
-  in this order: **ENBSeries binaries → Silent Horizons 2 - Shader Core →
-  Cabbage Lux preset**. Shader Core is required for Cabbage 1.2+ and its
-  `enbseries` folder belongs beside `SkyrimSE.exe`. Cabbage then overwrites the
-  core's matching files while retaining the required shaders.
-  [Cabbage author's requirements and installation](https://www.nexusmods.com/skyrimspecialedition/mods/103042),
-  [Shader Core main archive](https://www.nexusmods.com/skyrimspecialedition/mods/101696?tab=files).
+Script-managed downloads remain sequential, resumable and capped at
+`curl --limit-rate 11250000` (90 Mbps). Browser downloads are outside this
+cap. Archive SHA256/file IDs are locked; `-RefreshDownloads` deliberately
+resolves updated versions and invalidates generation when inputs change.
+FOMOD exact choices are saved in `fomod.choices.json`. Invalid/unavailable
+choices, unsupported installer instructions and unsafe archive paths fail.
+`-NonInteractive` requires all choices and reusable generation checkpoints.
 
-After the base setup is finalized: **PGPatcher → xLODGen terrain → TexGen →
-DynDOLOD**, with output deployed between steps. Generators use fresh external
-output folders; no stale output directory can establish success. PGPatcher's
-diff JSON/patched meshes, terrain meshes/textures, TexGen DDS and DynDOLOD
-plugins/object meshes are checked. You must also confirm successful generation
-after reviewing each tool's errors. Fatal tool errors are not repaired by
-inventing dummy masters or auto-cleaning your plugins. GPU/VRAM-sensitive tool
-settings are shown as guided choices, not silently selected for unknown hardware.
+The base overwrite order follows V2; plugin order uses inspected masters and
+LOOT. QW's Pine Grass/Origins of Forest/Folkvangr prerequisites are included,
+and Skoglendi follows QW as requested. This does not create a hybrid grass patch.
+Cathedral expands to 13 plant releases plus the Hearthfire flower patch; Xavbio
+expands to 22 armor/weapon families. Nordic Faces uses full textures/body and
+full FaceTint, followed by Non-SMP FaceGeom. ERM uses its maintained successor's
+mesh and texture downloads. Lux Via supplies **resources only**.
+
+Generators run in the V2 sequence and deploy each validated output before the
+next. PGPatcher uses CS-compatible complex material/parallax for the selected
+assets; leave True PBR conversion off. Use terrain-only xLODGen, then TexGen,
+then DynDOLOD. Fresh output folders, patched meshes/diff JSON, terrain assets,
+TexGen DDS and DynDOLOD plugins/object meshes are checked. Review tool errors
+and confirm successful completion. No dummy masters or automatic cleaning
+are used to conceal failures.
 [PGPatcher usage](https://github.com/hakasapl/PGPatcher/wiki/Basic-Usage),
 [xLODGen](https://dyndolod.info/Help/xLODGen),
 [TexGen](https://dyndolod.info/Help/TexGen),
 [DynDOLOD](https://dyndolod.info/Help/DynDOLOD).
 
-PG_X override plugins must be after normal plugins and before DynDOLOD. The
-ESM-flagged PGPatcher.esp contains new texture sets; it is not mistakenly forced
-after all ESPs. [PGPatcher output definitions](https://github.com/hakasapl/PGPatcher/wiki/Output).
+## Steam, failures and resume
 
-## Progress, failures and resume
+Assets deploy directly into the real Data folder and Windows user's real
+plugins/loadorder/INI files. After successful generation the installer
+compiles the supplied C# source and manifest, backs up the stock launcher,
+and applies this launch chain:
 
-The console shows phase/package and concise status, with long-running external
-process heartbeats every 30 seconds. Detailed CRC/extraction/copy/compiler logs,
-`installer.log`, and structured `failure.json` are in WorkPath's timestamped Logs
-folder. Failure includes phase, package, reason, remedy, failing line and whether
-game data may be partial. The installer returns nonzero and never announces a
-complete installation after a failed step.
+```text
+Normal Steam Play / Remote Play
+  → hidden SkyrimSELauncher.exe bridge
+  → skse64_loader.exe -waitforclose
+  → original SkyrimSE.exe
+```
 
-| Exit | Meaning |
-| --- | --- |
-| 0 | Requested mode completed; live Remote Play is not yet proven |
-| 1 | Unexpected failure; inspect line/stack/log |
-| 2 | Download, authentication, file selection or checksum |
-| 3 | Runtime/configuration conflict, prerequisites, space, archive extraction/CRC, unsafe paths/concurrency |
-| 4 | Archive payload, FOMOD choice, native compatibility |
-| 5 | Deployment permissions/copy failure |
-| 6 | Plugin masters/order/limits/LOOT |
-| 7 | Generator/tool/output failure |
-| 8 | Steam bridge/critical launch-chain validation |
+The bridge uses app ID 489830, waits through the game session, and requires a
+V2/CommunityShaders receipt. It verifies the original game, matching SKSE,
+native DLLs and required CS feature hashes, accepts safe relative Data paths,
+and rejects ENB/Effects11 components. Keep Steam Launch Options empty/default.
+Steam verification/updates can replace the launcher or runtime; review and
+rerun afterward. The script does not change Steam update settings.
+[Official SKSE wait-for-close option](https://github.com/ianpatt/skse64/blob/master/skse64_loader/Options.cpp).
 
-Resume does not blindly skip "completed" steps: base assets replay in order;
-only individually journaled previous generated files are removed first. Outputs
-are reused only when their input signature and every saved output hash match.
-The base signature includes actual Data content, INIs, load order and launch
-binaries. Generator outputs are chained, so changed PGPatcher output invalidates
-later stages. Cached archives, choices, checkpoints and logs remain available.
-There is no full rollback system; direct overwrites are intentional.
+Logs and structured failure reports are in WorkPath's timestamped Logs folder.
+Failures return nonzero and identify phase, package and remedy. Resume replays
+base assets, removes only individually owned prior generator files, and reuses
+outputs only when input signatures and output hashes match. Signatures include
+actual Data/shader settings, INIs, load order and launch binaries. Interrupted
+installation marks a previous bridge pending so it refuses launch. Direct
+overwrites are intentional; there is no full rollback system.
 
-PowerShell syntax, configuration JSON and bridge-manifest XML were checked
-without running the installer. The C# bridge source has not been executed or
-installed; compilation is a checked installation step before any Data deployment.
+Offline regression checks are available with:
 
-While installing, do not start Skyrim or ask Steam to verify/update it. After a
-failed Install, do not launch the partially installed game. A previously applied
-bridge is marked pending before deployment and refuses play until completion.
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Installer.V2.Tests.ps1
+```
 
-## Later live acceptance test
-
-Only after you authorize installation/testing: use Steam's ordinary Skyrim
-Play button, verify SKSE/SkyUI and the ENB preset in-game, exit normally, then
-start the same Steam entry remotely and check video, controller input, continued
-session tracking, and clean exit/relaunch. First ENB shader compilation can take
-time. No such game/Remote Play test is performed by this script automatically.
-Launch errors go to `%LOCALAPPDATA%\SkyrimModInstaller\LaunchLogs\steam-launch.log`.
+These tests use temporary folders and compile/validate the bridge without
+running its entrypoint, Steam or Skyrim. Read-only Plan verifies the local
+runtime/list/config. Full catalogue downloads, Prepare/Install, shader compilation
+and Steam/Remote Play have not been exercised here. After installation, check
+SKSE, SkyUI, CS/NAT.CS/Lux visuals, local Steam play, then Remote Play video,
+controller input, session tracking and exit/relaunch. CS's first shader
+compilation may take time. Launch logs go to
+`%LOCALAPPDATA%\SkyrimModInstaller\LaunchLogs\steam-launch.log`.

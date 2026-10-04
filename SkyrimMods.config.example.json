@@ -1,0 +1,66 @@
+{
+  "SchemaVersion": 2,
+  "ExpectedRuntime": "1.7.104.0",
+  "InstallListVersion": "V2",
+  "InstallListSha256": "BCF09B12398C9CE02B4242F115E2BCD60A60FA30201604F13363F8ED9869EE8D",
+  "RenderingFramework": "CommunityShaders",
+  "LuxCsVariant": "Non-Effects11",
+  "Effects11": false,
+  "MinimumWorkFreeGiB": 160,
+  "MinimumGameFreeGiB": 80,
+  "SevenZipPath": "",
+  "TerrainStrategy": "TerrainHelper",
+  "Packages": {},
+  "FomodSelections": {},
+  "NativeCompatibility": {
+    "community-shaders": {
+      "Runtimes": [
+        "1.7.104"
+      ],
+      "MinimumVersion": "1.9.1",
+      "EvidenceUrl": "https://www.nexusmods.com/skyrimspecialedition/mods/86492?tab=logs"
+    },
+    "light-placer": {
+      "Runtimes": [
+        "1.7.104"
+      ],
+      "MinimumVersion": "5.0.0",
+      "EvidenceUrl": "https://www.nexusmods.com/skyrimspecialedition/mods/127557?tab=logs"
+    },
+    "isl-helper": {
+      "Runtimes": [
+        "1.7.104"
+      ],
+      "MinimumVersion": "1.0.6",
+      "EvidenceUrl": "https://www.nexusmods.com/skyrimspecialedition/mods/179132?tab=logs"
+    },
+    "skse-menu-framework": {
+      "Runtimes": [
+        "1.7.104"
+      ],
+      "MinimumVersion": "3.14.1",
+      "EvidenceUrl": "https://www.nexusmods.com/skyrimspecialedition/mods/120352?tab=logs"
+    },
+    "terrain-helper": {
+      "Runtimes": [
+        "1.7.104"
+      ],
+      "MinimumVersion": "1.1.0",
+      "EvidenceUrl": "https://www.nexusmods.com/skyrimspecialedition/mods/143149?tab=logs"
+    },
+    "po3-tweaks": {
+      "Runtimes": [
+        "1.7.104"
+      ],
+      "MinimumVersion": "1.17.1",
+      "EvidenceUrl": "https://www.nexusmods.com/skyrimspecialedition/mods/51073?tab=logs"
+    },
+    "dyndolod-dll": {
+      "Runtimes": [
+        "1.7.104"
+      ],
+      "MinimumAlpha": 42,
+      "EvidenceUrl": "https://www.nexusmods.com/skyrimspecialedition/mods/97720?tab=logs"
+    }
+  }
+}
