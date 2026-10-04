@@ -1,0 +1,31 @@
+Install order
+
+1. SMIM — highest-quality/default assets.
+2. Mesh Improvement Compilation — highest-quality/default assets.
+3. Skyland AIO — 2K (highest official AIO resolution).
+4. Skyrim 202X — 4K Downscale.
+5. Skyking Fantasia Landscapes — 4K.
+6. Fantasia Landscapes Complex Parallax — install immediately after Fantasia.
+7. Enhanced Rocks and Mountains (ERM) — use Complex Parallax option; 4K textures where offered.
+8. ERM Blending Patch and Other Fixes — use the ERM/Complex Parallax configuration.
+9. Simplicity of Snow — highest-quality/default assets.
+10. QW's Grass Patch 2 — highest-resolution/default package.
+11. Skoglendi — highest-resolution/default package.
+12. Nature of the Wild Lands — use 4K bark diffuse + 4K bark normal maps.
+13. Cathedral 3D Plant Suite — 4K wherever available.
+14. Water for ENB — highest-quality/default textures.
+15. Xavbio's Armor & Weapon Retextures — full-resolution / 4K versions where offered.
+16. Nordic Faces — highest-resolution/full package.
+17. SkyUI 6
+18. Dear Diary Dark Mode
+19. NAT III
+20. Lux Orbis
+21. Lux
+22.9. ENBSeries Skyrim SE binaries — WrapperVersion DLLs in the Skyrim game folder.
+22.95. Silent Horizons 2 - Shader Core — required for Cabbage 1.2+; enbseries in the Skyrim game folder.
+23. Cabbage ENB — Lux preset; install after NAT III, Lux and Shader Core, before running the generators.
+Then, only after everything above is finalized:
+24. ParallaxGen / PGPatcher — run against the completed mesh/texture setup.
+25. xLODGen
+26. TexGen
+27. DynDOLOD 3 — run last.

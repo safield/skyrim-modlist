@@ -1,0 +1,6 @@
+# Track only the installer and its documentation.
+/*
+!/.gitignore
+!/Install-SkyrimMods.ps1
+!/Install order.txt
+!/SkyrimMods.README.md
